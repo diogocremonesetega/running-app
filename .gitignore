@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Environment
+.env
+.env.local
+
+# GraphHopper data (too large for git)
+graphhopper/data/*.osm.pbf
+graphhopper/data/graph-cache/
+graphhopper/graph-cache/
+**/graph-cache/
+graphhopper/elevation-cache/
+graphhopper/*.jar
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db

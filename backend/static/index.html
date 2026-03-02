@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running Route Generator — Elevation Visualizer</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0f0f14;
+      --bg-card: #1a1a24;
+      --bg-card-hover: #22222e;
+      --border: #2a2a3a;
+      --text-primary: #e8e8ec;
+      --text-secondary: #8888a0;
+      --text-muted: #555570;
+      --accent-blue: #4a90d9;
+      --accent-green: #34d399;
+      --accent-orange: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #a78bfa;
+      --gradient-start: #4a90d9;
+      --gradient-end: #a78bfa;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* --- Header --- */
+    .header {
+      background: linear-gradient(135deg, rgba(74, 144, 217, 0.08), rgba(167, 139, 250, 0.08));
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 54px;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header .status {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: var(--accent-green);
+    }
+
+    /* --- Layout --- */
+    .main {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      height: calc(100vh - 54px);
+    }
+
+    /* --- Sidebar / Controls --- */
+    .sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="number"],
+    select {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="number"]:focus,
+    select:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .toggle.active {
+      background: var(--accent-blue);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+
+    .toggle.active::after {
+      transform: translateX(18px);
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(74, 144, 217, 0.3);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+    }
+
+    .profile-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .profile-card {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--bg-primary);
+    }
+
+    .profile-card:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .profile-card.selected {
+      border-color: var(--accent-blue);
+      background: rgba(74, 144, 217, 0.08);
+    }
+
+    .profile-card .name {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 1px;
+    }
+
+    .profile-card .desc {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* --- Content area --- */
+    .content {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* --- Stats bar --- */
+    .stats-bar {
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .stat {
+      flex: 1;
+      background: var(--bg-card);
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .stat .label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .stat .value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .stat .unit {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-secondary);
+    }
+
+    .stat.ascend .value {
+      color: var(--accent-orange);
+    }
+
+    .stat.descend .value {
+      color: var(--accent-blue);
+    }
+
+    .stat.distance .value {
+      color: var(--accent-green);
+    }
+
+    .stat.time .value {
+      color: var(--accent-purple);
+    }
+
+    /* --- Leaflet Map --- */
+    .map-area {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+    }
+
+    #leafletMap {
+      width: 100%;
+      height: 100%;
+      background: #0d1117;
+    }
+
+    /* Dark Leaflet controls */
+    .leaflet-control-zoom a {
+      background: var(--bg-card) !important;
+      color: var(--text-primary) !important;
+      border-color: var(--border) !important;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background: var(--bg-card-hover) !important;
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(15, 15, 20, 0.85) !important;
+      color: var(--text-muted) !important;
+      font-size: 10px !important;
+    }
+
+    .leaflet-control-attribution a {
+      color: var(--accent-blue) !important;
+    }
+
+    /* Map placeholder overlay */
+    .map-placeholder-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 500;
+    }
+
+    .map-placeholder-overlay .inner {
+      color: var(--text-muted);
+      text-align: center;
+      padding: 30px 40px;
+      background: rgba(15, 15, 20, 0.7);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    .map-placeholder-overlay .icon {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+
+    /* Elevation legend on map */
+    .map-legend {
+      position: absolute;
+      bottom: 30px;
+      right: 12px;
+      z-index: 600;
+      background: rgba(26, 26, 36, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    .map-legend .title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 6px;
+    }
+
+    .legend-gradient {
+      width: 120px;
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(to right, #34d399, #f59e0b, #ef4444);
+      margin-bottom: 4px;
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    /* --- Elevation chart --- */
+    .elevation-panel {
+      height: 180px;
+      min-height: 180px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px 10px;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .elevation-panel .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .elevation-panel h3 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .elevation-panel .elev-range-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .chart-container {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+    }
+
+    .chart-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* --- Tooltip --- */
+    .chart-tooltip {
+      position: absolute;
+      background: rgba(26, 26, 36, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+    }
+
+    .chart-tooltip.visible {
+      opacity: 1;
+    }
+
+    /* --- Log / console --- */
+    .log-panel {
+      height: 60px;
+      min-height: 60px;
+      overflow-y: auto;
+      background: #08080c;
+      border-top: 1px solid var(--border);
+      padding: 6px 14px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .log-entry {
+      padding: 1px 0;
+    }
+
+    .log-entry.error {
+      color: var(--accent-red);
+    }
+
+    .log-entry.success {
+      color: var(--accent-green);
+    }
+
+    .log-entry.info {
+      color: var(--accent-blue);
+    }
+
+    /* Custom Leaflet popup */
+    .leaflet-popup-content-wrapper {
+      background: var(--bg-card) !important;
+      color: var(--text-primary) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 10px !important;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .leaflet-popup-tip {
+      background: var(--bg-card) !important;
+      border: 1px solid var(--border) !important;
+    }
+
+    .leaflet-popup-content {
+      font-family: 'Inter', sans-serif !important;
+      font-size: 12px !important;
+      margin: 10px 14px !important;
+    }
+
+    /* --- Compass direction selector --- */
+    .compass {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      width: 100%;
+    }
+
+    .compass-btn {
+      padding: 6px 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .compass-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-secondary);
+    }
+
+    .compass-btn.selected {
+      border-color: var(--accent-blue);
+      background: rgba(74, 144, 217, 0.12);
+      color: var(--accent-blue);
+    }
+
+    .compass-btn.center {
+      background: transparent;
+      border-color: transparent;
+      cursor: default;
+      font-size: 16px;
+    }
+
+    /* --- Unit toggle (km / mi) --- */
+    .unit-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .unit-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: none;
+      background: var(--bg-primary);
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .unit-btn.selected {
+      background: rgba(74, 144, 217, 0.15);
+      color: var(--accent-blue);
+    }
+
+    .unit-btn:first-child {
+      border-right: 1px solid var(--border);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        max-height: 280px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>🏃 Running Route Generator — Elevation Visualizer</h1>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Checking connection...</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Sidebar Controls -->
+    <div class="sidebar">
+      <div class="control-group">
+        <label>Start Location (Berkeley)</label>
+        <input type="number" id="startLat" value="37.8719" step="0.0001" placeholder="Latitude">
+        <input type="number" id="startLng" value="-122.2585" step="0.0001" placeholder="Longitude">
+      </div>
+
+      <div class="control-group">
+        <label id="distanceLabel">Target Distance (km)</label>
+        <input type="number" id="distanceInput" value="5.0" min="0.5" max="50" step="0.5">
+        <div class="unit-toggle">
+          <button class="unit-btn selected" data-unit="km" onclick="selectUnit('km')">km</button>
+          <button class="unit-btn" data-unit="mi" onclick="selectUnit('mi')">miles</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Waypoints</label>
+        <input type="number" id="numWaypoints" value="5" min="3" max="12" step="1">
+      </div>
+
+      <div class="control-group">
+        <label>Route Direction</label>
+        <div class="compass">
+          <button class="compass-btn" data-dir="NW" data-bearing="315" onclick="selectDirection(this)">NW</button>
+          <button class="compass-btn selected" data-dir="N" data-bearing="0" onclick="selectDirection(this)">N</button>
+          <button class="compass-btn" data-dir="NE" data-bearing="45" onclick="selectDirection(this)">NE</button>
+          <button class="compass-btn" data-dir="W" data-bearing="270" onclick="selectDirection(this)">W</button>
+          <button class="compass-btn center">🧭</button>
+          <button class="compass-btn" data-dir="E" data-bearing="90" onclick="selectDirection(this)">E</button>
+          <button class="compass-btn" data-dir="SW" data-bearing="225" onclick="selectDirection(this)">SW</button>
+          <button class="compass-btn" data-dir="S" data-bearing="180" onclick="selectDirection(this)">S</button>
+          <button class="compass-btn" data-dir="SE" data-bearing="135" onclick="selectDirection(this)">SE</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Elevation Profile</label>
+        <div class="profile-cards">
+          <div class="profile-card selected" data-profile="moderate" onclick="selectProfile(this)">
+            <div class="name">⛰️ Balanced</div>
+            <div class="desc">Moderate hills, good for everyday runs</div>
+          </div>
+          <div class="profile-card" data-profile="flat" onclick="selectProfile(this)">
+            <div class="name">🌊 Flat Recovery</div>
+            <div class="desc">Avoids hills for easy recovery</div>
+          </div>
+          <div class="profile-card" data-profile="hilly" onclick="selectProfile(this)">
+            <div class="name">🔺 Hill Training</div>
+            <div class="desc">Seeks steep climbs for workouts</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="toggle-group">
+          <label>Avoid Traffic Signals</label>
+          <div class="toggle" id="toggleSignals" onclick="toggleSwitch(this)"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="generateBtn" onclick="generateRoute()">
+        Generate Route
+      </button>
+
+      <button class="btn btn-secondary" onclick="compareProfiles()">
+        Compare All Profiles
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Stats -->
+      <div class="stats-bar" id="statsBar">
+        <div class="stat distance">
+          <span class="label">Distance</span>
+          <span class="value" id="statDistance">—<span class="unit"> km</span></span>
+        </div>
+        <div class="stat ascend">
+          <span class="label">Ascent ↑</span>
+          <span class="value" id="statAscend">—<span class="unit"> m</span></span>
+        </div>
+        <div class="stat descend">
+          <span class="label">Descent ↓</span>
+          <span class="value" id="statDescend">—<span class="unit"> m</span></span>
+        </div>
+        <div class="stat time">
+          <span class="label">Est. Time</span>
+          <span class="value" id="statTime">—<span class="unit"> min</span></span>
+        </div>
+        <div class="stat">
+          <span class="label">Elev. Range</span>
+          <span class="value" id="statRange">—<span class="unit"> m</span></span>
+        </div>
+      </div>
+
+      <!-- Route map (Leaflet) -->
+      <div class="map-area">
+        <div id="leafletMap"></div>
+        <div class="map-placeholder-overlay" id="mapPlaceholder">
+          <div class="inner">
+            <div class="icon">🗺️</div>
+            <div>Generate a route to see it on the map</div>
+            <div style="font-size:11px; margin-top:4px; color:#444;">Route segments colored by elevation</div>
+          </div>
+        </div>
+        <div class="map-legend" id="mapLegend" style="display:none;">
+          <div class="title">Elevation</div>
+          <div class="legend-gradient"></div>
+          <div class="legend-labels">
+            <span id="legendLow">—</span>
+            <span id="legendHigh">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Elevation chart -->
+      <div class="elevation-panel">
+        <div class="panel-header">
+          <h3>Elevation Profile</h3>
+          <span class="elev-range-label" id="elevRangeLabel"></span>
+        </div>
+        <div class="chart-container" id="chartContainer">
+          <canvas id="elevationChart"></canvas>
+          <div class="chart-tooltip" id="chartTooltip"></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-panel" id="logPanel"></div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+    // ========== State ==========
+    const API_BASE = '';
+    let selectedProfile = 'moderate';
+    let avoidSignals = false;
+    let currentRouteData = null;
+    let routeLayerGroup = null;
+    let elevationMarker = null;
+    let selectedBearing = 0;
+    let currentUnit = 'km'; // 'km' or 'mi'
+    const KM_TO_MI = 0.621371;
+    const MI_TO_KM = 1.60934;
+
+    // ========== Leaflet Map Init ==========
+    // Center on UC Berkeley, dark tile layer
+    const map = L.map('leafletMap', {
+      center: [37.8719, -122.2585],
+      zoom: 14,
+      zoomControl: true,
+    });
+
+    // CartoDB Dark Matter tiles (free, dark style, perfect for this UI)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }).addTo(map);
+
+    routeLayerGroup = L.layerGroup().addTo(map);
+
+    // ========== Connection check ==========
+    async function checkConnection() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/health`);
+        const data = await resp.json();
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if (data.graphhopper?.status === 'ok') {
+          dot.classList.add('connected');
+          text.textContent = 'GraphHopper connected';
+          log('Connected to GraphHopper ✓', 'success');
+        } else {
+          text.textContent = 'GraphHopper unavailable';
+          log('GraphHopper not reachable', 'error');
+        }
+      } catch (e) {
+        document.getElementById('statusText').textContent = 'Backend unavailable';
+        log('Backend not reachable — start it with uvicorn', 'error');
+      }
+    }
+
+    // ========== Controls ==========
+    function selectProfile(el) {
+      document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedProfile = el.dataset.profile;
+    }
+
+    function toggleSwitch(el) {
+      el.classList.toggle('active');
+      avoidSignals = el.classList.contains('active');
+    }
+
+    function selectDirection(el) {
+      document.querySelectorAll('.compass-btn').forEach(b => b.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedBearing = parseInt(el.dataset.bearing);
+    }
+
+    function selectUnit(unit) {
+      if (unit === currentUnit) return;
+      const input = document.getElementById('distanceInput');
+      const currentVal = parseFloat(input.value);
+
+      document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('selected'));
+      document.querySelector(`.unit-btn[data-unit="${unit}"]`).classList.add('selected');
+
+      if (unit === 'mi') {
+        input.value = (currentVal * KM_TO_MI).toFixed(1);
+        input.step = '0.5';
+        document.getElementById('distanceLabel').textContent = 'Target Distance (miles)';
+      } else {
+        input.value = (currentVal * MI_TO_KM).toFixed(1);
+        input.step = '0.5';
+        document.getElementById('distanceLabel').textContent = 'Target Distance (km)';
+      }
+      currentUnit = unit;
+
+      // Re-render stats if we have data
+      if (currentRouteData) updateStats(currentRouteData);
+    }
+
+    // ========== Elevation color helper ==========
+    function elevColor(elev, minElev, maxElev) {
+      const range = maxElev - minElev || 1;
+      const t = (elev - minElev) / range;
+      // Green → Yellow-Orange → Red
+      if (t < 0.33) {
+        const s = t / 0.33;
+        return `rgb(${Math.round(52 + 191 * s)}, ${Math.round(211 - 12 * s)}, ${Math.round(153 - 142 * s)})`;
+      } else if (t < 0.66) {
+        const s = (t - 0.33) / 0.33;
+        return `rgb(${Math.round(243 + 2 * s)}, ${Math.round(199 - 40 * s)}, 11)`;
+      } else {
+        const s = (t - 0.66) / 0.34;
+        return `rgb(${Math.round(245 - 6 * s)}, ${Math.round(159 - 91 * s)}, ${Math.round(11 + 57 * s)})`;
+      }
+    }
+
+    // ========== Route generation ==========
+    async function generateRoute() {
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+      log('Requesting route...', 'info');
+
+      // Convert input distance to km for the API
+      let distVal = parseFloat(document.getElementById('distanceInput').value);
+      if (currentUnit === 'mi') distVal = distVal * MI_TO_KM;
+
+      const body = {
+        start: {
+          lat: parseFloat(document.getElementById('startLat').value),
+          lng: parseFloat(document.getElementById('startLng').value),
+        },
+        distance_km: distVal,
+        elevation_preference: selectedProfile,
+        avoid_traffic_signals: avoidSignals,
+        num_waypoints: parseInt(document.getElementById('numWaypoints').value),
+        start_bearing: selectedBearing,
+      };
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/generate-route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        currentRouteData = data;
+
+        updateStats(data);
+        drawRouteOnMap(data);
+        drawElevationChart(data);
+
+        const props = data.route?.properties;
+        log(`Route generated: ${props?.distance_km} km, ↑${props?.ascend_m}m, ↓${props?.descend_m}m [${props?.profile_used}]`, 'success');
+      } catch (e) {
+        log(`Error: ${e.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Route';
+      }
+    }
+
+    // ========== Compare profiles ==========
+    async function compareProfiles() {
+      log('Comparing all profiles...', 'info');
+      const profiles = ['flat', 'moderate', 'hilly'];
+
+      for (const prof of profiles) {
+        let distVal = parseFloat(document.getElementById('distanceInput').value);
+        if (currentUnit === 'mi') distVal = distVal * MI_TO_KM;
+
+        const body = {
+          start: {
+            lat: parseFloat(document.getElementById('startLat').value),
+            lng: parseFloat(document.getElementById('startLng').value),
+          },
+          distance_km: distVal,
+          elevation_preference: prof,
+          avoid_traffic_signals: false,
+          num_waypoints: parseInt(document.getElementById('numWaypoints').value),
+          start_bearing: selectedBearing,
+        };
+
+        try {
+          const resp = await fetch(`${API_BASE}/api/v1/generate-route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await resp.json();
+          const p = data.route?.properties;
+          log(`  ${prof}: ↑${p?.ascend_m}m  ↓${p?.descend_m}m  ${p?.distance_km}km`, 'info');
+        } catch (e) {
+          log(`  ${prof}: error — ${e.message}`, 'error');
+        }
+      }
+      log('Profile comparison complete ✓', 'success');
+    }
+
+    // ========== Update stats ==========
+    function updateStats(data) {
+      const p = data.route?.properties || {};
+      const s = data.elevation_stats || {};
+
+      // Distance — convert to current unit
+      let dist = p.distance_km;
+      let distUnit = 'km';
+      if (currentUnit === 'mi' && dist != null) {
+        dist = (dist * KM_TO_MI).toFixed(2);
+        distUnit = 'mi';
+      }
+
+      // Elevation — convert to feet if miles
+      let ascend = p.ascend_m;
+      let descend = p.descend_m;
+      let range = s.elevation_range_m;
+      let elevUnit = 'm';
+      if (currentUnit === 'mi') {
+        if (ascend != null) ascend = Math.round(ascend * 3.28084);
+        if (descend != null) descend = Math.round(descend * 3.28084);
+        if (range != null) range = Math.round(range * 3.28084);
+        elevUnit = 'ft';
+      }
+
+      document.getElementById('statDistance').innerHTML = `${dist ?? '—'}<span class="unit"> ${distUnit}</span>`;
+      document.getElementById('statAscend').innerHTML = `${ascend ?? '—'}<span class="unit"> ${elevUnit}</span>`;
+      document.getElementById('statDescend').innerHTML = `${descend ?? '—'}<span class="unit"> ${elevUnit}</span>`;
+      document.getElementById('statTime').innerHTML = `${p.time_min ?? '—'}<span class="unit"> min</span>`;
+      document.getElementById('statRange').innerHTML = `${range ?? '—'}<span class="unit"> ${elevUnit}</span>`;
+    }
+
+    // ========== Draw route on Leaflet map ==========
+    function drawRouteOnMap(data) {
+      const coords = data.route?.geometry?.coordinates || [];
+      const waypoints = data.waypoints_generated || [];
+
+      if (!coords.length) return;
+
+      // Hide placeholder
+      const ph = document.getElementById('mapPlaceholder');
+      if (ph) ph.style.display = 'none';
+
+      // Clear old layers
+      routeLayerGroup.clearLayers();
+      if (elevationMarker) {
+        map.removeLayer(elevationMarker);
+        elevationMarker = null;
+      }
+
+      // Compute elevation range
+      const elevations = coords.map(c => c[2] || 0);
+      const minElev = Math.min(...elevations);
+      const maxElev = Math.max(...elevations);
+
+      // Update legend
+      const legend = document.getElementById('mapLegend');
+      legend.style.display = 'block';
+      document.getElementById('legendLow').textContent = `${Math.round(minElev)}m`;
+      document.getElementById('legendHigh').textContent = `${Math.round(maxElev)}m`;
+
+      // Draw route as small colored segments
+      const SEGMENT_SIZE = 5; // group N points per polyline for performance
+      for (let i = 0; i < coords.length - 1; i += SEGMENT_SIZE) {
+        const end = Math.min(i + SEGMENT_SIZE + 1, coords.length);
+        const segCoords = [];
+        for (let j = i; j < end; j++) {
+          segCoords.push([coords[j][1], coords[j][0]]); // [lat, lng] for Leaflet
+        }
+        const avgElev = coords.slice(i, end).reduce((s, c) => s + (c[2] || 0), 0) / (end - i);
+        const color = elevColor(avgElev, minElev, maxElev);
+
+        const polyline = L.polyline(segCoords, {
+          color: color,
+          weight: 5,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+        routeLayerGroup.addLayer(polyline);
+      }
+
+      // Draw a faint shadow/outline under the route for contrast
+      const fullLatLngs = coords.map(c => [c[1], c[0]]);
+      const shadow = L.polyline(fullLatLngs, {
+        color: '#000',
+        weight: 8,
+        opacity: 0.3,
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+      routeLayerGroup.addLayer(shadow);
+      shadow.bringToBack();
+
+      // Waypoint markers (small purple circles)
+      waypoints.forEach((wp, idx) => {
+        const marker = L.circleMarker([wp.lat, wp.lng], {
+          radius: 6,
+          fillColor: '#a78bfa',
+          fillOpacity: 0.85,
+          color: '#c4b5fd',
+          weight: 2,
+        });
+        marker.bindPopup(`<strong>Waypoint ${idx + 1}</strong><br>Lat: ${wp.lat.toFixed(5)}<br>Lng: ${wp.lng.toFixed(5)}`);
+        routeLayerGroup.addLayer(marker);
+      });
+
+      // Start marker (larger green circle with pulsing ring)
+      const startLatLng = [coords[0][1], coords[0][0]];
+      const startMarker = L.circleMarker(startLatLng, {
+        radius: 10,
+        fillColor: '#34d399',
+        fillOpacity: 1,
+        color: '#fff',
+        weight: 3,
+      });
+      startMarker.bindPopup(`<strong>START / FINISH</strong><br>Elevation: ${Math.round(coords[0][2] || 0)}m`);
+      routeLayerGroup.addLayer(startMarker);
+
+      // Fit bounds with padding
+      const bounds = L.latLngBounds(fullLatLngs);
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+
+    // ========== Highlight point on map from chart hover ==========
+    function showPointOnMap(lat, lng, elev) {
+      if (elevationMarker) {
+        elevationMarker.setLatLng([lat, lng]);
+      } else {
+        elevationMarker = L.circleMarker([lat, lng], {
+          radius: 7,
+          fillColor: '#fff',
+          fillOpacity: 1,
+          color: '#4a90d9',
+          weight: 3,
+        }).addTo(map);
+      }
+    }
+
+    function hidePointOnMap() {
+      if (elevationMarker) {
+        map.removeLayer(elevationMarker);
+        elevationMarker = null;
+      }
+    }
+
+    // ========== Draw elevation chart ==========
+    function drawElevationChart(data) {
+      const canvas = document.getElementById('elevationChart');
+      const ctx = canvas.getContext('2d');
+      const container = document.getElementById('chartContainer');
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.scale(dpr, dpr);
+
+      const profile = data.elevation_profile || [];
+      if (!profile.length) return;
+
+      const padding = { top: 8, right: 16, bottom: 24, left: 44 };
+      const plotW = w - padding.left - padding.right;
+      const plotH = h - padding.top - padding.bottom;
+
+      const distances = profile.map(p => p.distance_m);
+      const elevations = profile.map(p => p.elevation_m);
+      const maxDist = Math.max(...distances);
+      const minElev = Math.min(...elevations) - 5;
+      const maxElev = Math.max(...elevations) + 5;
+      const elevRange = maxElev - minElev;
+
+      // Show range in header
+      document.getElementById('elevRangeLabel').textContent =
+        `${Math.round(minElev + 5)}m – ${Math.round(maxElev - 5)}m`;
+
+      function toCanvas(dist, elev) {
+        return [
+          padding.left + (dist / maxDist) * plotW,
+          padding.top + plotH - ((elev - minElev) / elevRange) * plotH,
+        ];
+      }
+
+      // Clear
+      ctx.clearRect(0, 0, w, h);
+
+      // Subtle grid lines
+      ctx.strokeStyle = 'rgba(42,42,58,0.5)';
+      ctx.lineWidth = 1;
+      const numYGrid = 4;
+      for (let i = 0; i <= numYGrid; i++) {
+        const elev = minElev + (elevRange * i) / numYGrid;
+        const [, y] = toCanvas(0, elev);
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(w - padding.right, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#555570';
+        ctx.font = '9px Inter, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(elev)}m`, padding.left - 5, y + 3);
+      }
+
+      // X-axis labels
+      const numXGrid = 5;
+      for (let i = 0; i <= numXGrid; i++) {
+        const dist = (maxDist * i) / numXGrid;
+        const [x] = toCanvas(dist, minElev);
+        ctx.fillStyle = '#555570';
+        ctx.font = '9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${(dist / 1000).toFixed(1)}km`, x, h - 4);
+      }
+
+      // Filled area gradient
+      const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotH);
+      gradient.addColorStop(0, 'rgba(74, 144, 217, 0.25)');
+      gradient.addColorStop(1, 'rgba(74, 144, 217, 0.02)');
+
+      ctx.beginPath();
+      const [startX, startY] = toCanvas(distances[0], elevations[0]);
+      ctx.moveTo(startX, padding.top + plotH);
+      ctx.lineTo(startX, startY);
+
+      for (let i = 1; i < profile.length; i++) {
+        const [x, y] = toCanvas(distances[i], elevations[i]);
+        ctx.lineTo(x, y);
+      }
+
+      const [lastX] = toCanvas(distances[distances.length - 1], elevations[elevations.length - 1]);
+      ctx.lineTo(lastX, padding.top + plotH);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Draw line with elevation coloring
+      const realMinElev = Math.min(...elevations);
+      const realMaxElev = Math.max(...elevations);
+      for (let i = 0; i < profile.length - 1; i++) {
+        const [x1, y1] = toCanvas(distances[i], elevations[i]);
+        const [x2, y2] = toCanvas(distances[i + 1], elevations[i + 1]);
+        const color = elevColor(elevations[i], realMinElev, realMaxElev);
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Interactive hover — synced with map
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const dist = ((mx - padding.left) / plotW) * maxDist;
+
+        let closest = profile[0];
+        let minDiff = Infinity;
+        for (const p of profile) {
+          const diff = Math.abs(p.distance_m - dist);
+          if (diff < minDiff) { minDiff = diff; closest = p; }
+        }
+
+        const tooltip = document.getElementById('chartTooltip');
+        tooltip.innerHTML = `
+          <strong>${(closest.distance_m / 1000).toFixed(2)} km</strong><br>
+          Elevation: <strong>${closest.elevation_m} m</strong><br>
+          <span style="color:var(--text-muted)">Lat: ${closest.lat.toFixed(5)}, Lng: ${closest.lng.toFixed(5)}</span>
+        `;
+        tooltip.classList.add('visible');
+
+        // Position tooltip (flip side if near right edge)
+        const tipWidth = 180;
+        if (mx + tipWidth + 20 > w) {
+          tooltip.style.left = (mx - tipWidth - 10) + 'px';
+        } else {
+          tooltip.style.left = (mx + 12) + 'px';
+        }
+        tooltip.style.top = '0px';
+
+        // Sync: show dot on map
+        showPointOnMap(closest.lat, closest.lng, closest.elevation_m);
+      };
+
+      canvas.onmouseleave = () => {
+        document.getElementById('chartTooltip').classList.remove('visible');
+        hidePointOnMap();
+      };
+    }
+
+    // ========== Logging ==========
+    function log(msg, type = '') {
+      const panel = document.getElementById('logPanel');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString();
+      entry.textContent = `[${time}] ${msg}`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    // ========== Init ==========
+    window.addEventListener('load', () => {
+      log('Elevation Visualizer ready');
+      checkConnection();
+      // Force Leaflet to recalculate tile positions
+      setTimeout(() => map.invalidateSize(), 200);
+    });
+
+    // Handle resize
+    window.addEventListener('resize', () => {
+      map.invalidateSize();
+      if (currentRouteData) {
+        drawElevationChart(currentRouteData);
+      }
+    });
+  </script>
+</body>
+
+</html>

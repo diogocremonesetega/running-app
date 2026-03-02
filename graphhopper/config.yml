@@ -1,0 +1,49 @@
+graphhopper:
+
+  # --- Data source ---
+  datareader.file: data/norcal-latest.osm.pbf
+  graph.location: data/graph-cache
+
+  # --- ELEVATION (DEM) ---
+  graph.elevation.provider: srtm
+  graph.elevation.cache_dir: elevation-cache
+  graph.elevation.dataaccess: MMAP
+
+  # --- ENCODED VALUES ---
+  graph.encoded_values: foot_access, foot_priority, foot_average_speed, hike_rating, mtb_rating, road_class, road_environment, surface, max_speed, road_access, average_slope
+
+  # --- Do NOT exclude foot highways ---
+  import.osm.ignored_highways: motorway,trunk
+
+  # --- Custom model directory ---
+  custom_models.directory: custom_models
+
+  # --- PROFILES ---
+  profiles:
+    - name: foot_elevation
+      custom_model_files: [run_balanced.json]
+
+    - name: foot_flat_recovery
+      custom_model_files: [run_flat.json]
+
+    - name: foot_hill_training
+      custom_model_files: [run_hilly.json]
+
+    - name: foot_no_signals
+      custom_model_files: [run_no_signals.json]
+
+  # --- Subnetworks ---
+  prepare.min_network_size: 200
+  prepare.subnetworks.threads: 1
+
+  # --- Routing ---
+  routing.max_visited_nodes: 1000000
+
+  # --- SERVER ---
+  server:
+    application_connectors:
+      - type: http
+        port: 8989
+    admin_connectors:
+      - type: http
+        port: 8990

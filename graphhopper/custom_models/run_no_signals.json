@@ -1,0 +1,67 @@
+{
+  "priority": [
+    {
+      "if": "!foot_access || hike_rating >= 2",
+      "multiply_by": "0"
+    },
+    {
+      "if": "mtb_rating > 2",
+      "multiply_by": "0"
+    },
+    {
+      "else": "",
+      "multiply_by": "foot_priority"
+    },
+    {
+      "if": "road_class == PRIMARY",
+      "multiply_by": "0.3"
+    },
+    {
+      "else_if": "road_class == SECONDARY",
+      "multiply_by": "0.4"
+    },
+    {
+      "else_if": "road_class == TERTIARY",
+      "multiply_by": "0.6"
+    },
+    {
+      "if": "road_class == FOOTWAY || road_class == PATH || road_class == PEDESTRIAN",
+      "multiply_by": "2.0"
+    },
+    {
+      "else_if": "road_class == LIVING_STREET",
+      "multiply_by": "1.8"
+    },
+    {
+      "else_if": "road_class == RESIDENTIAL",
+      "multiply_by": "1.5"
+    },
+    {
+      "else_if": "road_class == CYCLEWAY",
+      "multiply_by": "1.6"
+    }
+  ],
+  "speed": [
+    {
+      "if": "true",
+      "limit_to": "foot_average_speed"
+    },
+    {
+      "if": "average_slope >= 15",
+      "limit_to": "1.5"
+    },
+    {
+      "else_if": "average_slope >=  7",
+      "limit_to": "2.5"
+    },
+    {
+      "else_if": "average_slope >=  4",
+      "multiply_by": "0.85"
+    },
+    {
+      "else_if": "average_slope <= -4",
+      "multiply_by": "1.05"
+    }
+  ],
+  "distance_influence": 60
+}
