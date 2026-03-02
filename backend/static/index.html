@@ -117,6 +117,7 @@
     }
 
     input[type="number"],
+    input[type="text"],
     select {
       background: var(--bg-primary);
       border: 1px solid var(--border);
@@ -127,11 +128,135 @@
       font-size: 13px;
       outline: none;
       transition: border-color 0.2s;
+      width: 100%;
     }
 
     input[type="number"]:focus,
+    input[type="text"]:focus,
     select:focus {
       border-color: var(--accent-blue);
+    }
+
+    /* --- Address search --- */
+    .search-wrapper {
+      position: relative;
+    }
+
+    .search-wrapper input[type="text"] {
+      padding-right: 32px;
+    }
+
+    .search-icon {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+    }
+
+    .search-dropdown.visible {
+      display: block;
+    }
+
+    .search-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(42, 42, 58, 0.3);
+      transition: background 0.15s;
+    }
+
+    .search-item:last-child {
+      border-bottom: none;
+    }
+
+    .search-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .search-item .main-text {
+      font-weight: 500;
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .search-item .sub-text {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .search-loading {
+      padding: 10px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .coord-display {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* --- Route mode toggle --- */
+    .mode-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .mode-btn {
+      flex: 1;
+      padding: 8px 0;
+      border: none;
+      background: var(--bg-primary);
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .mode-btn.selected {
+      background: rgba(74, 144, 217, 0.15);
+      color: var(--accent-blue);
+    }
+
+    .mode-btn:first-child {
+      border-right: 1px solid var(--border);
+    }
+
+    .loop-controls,
+    .p2p-controls {
+      transition: all 0.2s;
+    }
+
+    .hidden {
+      display: none !important;
     }
 
     .toggle-group {
@@ -613,13 +738,44 @@
   <div class="main">
     <!-- Sidebar Controls -->
     <div class="sidebar">
+      <!-- Route Mode Toggle -->
       <div class="control-group">
-        <label>Start Location (Berkeley)</label>
-        <input type="number" id="startLat" value="37.8719" step="0.0001" placeholder="Latitude">
-        <input type="number" id="startLng" value="-122.2585" step="0.0001" placeholder="Longitude">
+        <label>Route Type</label>
+        <div class="mode-toggle">
+          <button class="mode-btn selected" data-mode="loop" onclick="selectRouteMode('loop')">🔄 Loop</button>
+          <button class="mode-btn" data-mode="p2p" onclick="selectRouteMode('p2p')">📍 Point-to-Point</button>
+        </div>
       </div>
 
+      <!-- Start Location Search -->
       <div class="control-group">
+        <label>📍 Start Location</label>
+        <div class="search-wrapper">
+          <input type="text" id="startSearch" placeholder="Search address or place..." value="UC Berkeley, Sather Gate"
+            autocomplete="off">
+          <span class="search-icon">🔍</span>
+          <div class="search-dropdown" id="startDropdown"></div>
+        </div>
+        <div class="coord-display" id="startCoords">37.8719, -122.2585</div>
+        <input type="hidden" id="startLat" value="37.8719">
+        <input type="hidden" id="startLng" value="-122.2585">
+      </div>
+
+      <!-- End Location (P2P only) -->
+      <div class="control-group p2p-controls hidden" id="endLocationGroup">
+        <label>📍 End Location</label>
+        <div class="search-wrapper">
+          <input type="text" id="endSearch" placeholder="Search destination..." autocomplete="off">
+          <span class="search-icon">🔍</span>
+          <div class="search-dropdown" id="endDropdown"></div>
+        </div>
+        <div class="coord-display" id="endCoords">—</div>
+        <input type="hidden" id="endLat" value="">
+        <input type="hidden" id="endLng" value="">
+      </div>
+
+      <!-- Distance + Units (Loop only) -->
+      <div class="control-group loop-controls" id="distanceGroup">
         <label id="distanceLabel">Target Distance (km)</label>
         <input type="number" id="distanceInput" value="5.0" min="0.5" max="50" step="0.5">
         <div class="unit-toggle">
@@ -628,12 +784,14 @@
         </div>
       </div>
 
-      <div class="control-group">
+      <!-- Waypoints (Loop only) -->
+      <div class="control-group loop-controls" id="waypointsGroup">
         <label>Waypoints</label>
         <input type="number" id="numWaypoints" value="5" min="3" max="12" step="1">
       </div>
 
-      <div class="control-group">
+      <!-- Direction (Loop only) -->
+      <div class="control-group loop-controls" id="directionGroup">
         <label>Route Direction</label>
         <div class="compass">
           <button class="compass-btn" data-dir="NW" data-bearing="315" onclick="selectDirection(this)">NW</button>
@@ -677,7 +835,7 @@
         Generate Route
       </button>
 
-      <button class="btn btn-secondary" onclick="compareProfiles()">
+      <button class="btn btn-secondary loop-controls" onclick="compareProfiles()">
         Compare All Profiles
       </button>
     </div>
@@ -759,8 +917,14 @@
     let elevationMarker = null;
     let selectedBearing = 0;
     let currentUnit = 'km'; // 'km' or 'mi'
+    let routeMode = 'loop'; // 'loop' or 'p2p'
     const KM_TO_MI = 0.621371;
     const MI_TO_KM = 1.60934;
+    let searchTimeout = null;
+
+    // Geocoded start/end coordinates
+    let startCoord = { lat: 37.8719, lng: -122.2585 };
+    let endCoord = { lat: null, lng: null };
 
     // ========== Leaflet Map Init ==========
     // Center on UC Berkeley, dark tile layer
@@ -841,6 +1005,97 @@
       if (currentRouteData) updateStats(currentRouteData);
     }
 
+    // ========== Route mode toggle ==========
+    function selectRouteMode(mode) {
+      routeMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+      document.querySelector(`.mode-btn[data-mode="${mode}"]`).classList.add('selected');
+
+      const loopControls = document.querySelectorAll('.loop-controls');
+      const p2pControls = document.querySelectorAll('.p2p-controls');
+
+      if (mode === 'loop') {
+        loopControls.forEach(el => el.classList.remove('hidden'));
+        p2pControls.forEach(el => el.classList.add('hidden'));
+      } else {
+        loopControls.forEach(el => el.classList.add('hidden'));
+        p2pControls.forEach(el => el.classList.remove('hidden'));
+      }
+    }
+
+    // ========== Geocoding / Address Search ==========
+    function setupSearch(inputId, dropdownId, coordDisplayId, latInputId, lngInputId, onSelect) {
+      const input = document.getElementById(inputId);
+      const dropdown = document.getElementById(dropdownId);
+
+      input.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        const q = input.value.trim();
+        if (q.length < 3) {
+          dropdown.classList.remove('visible');
+          return;
+        }
+        searchTimeout = setTimeout(() => geocodeSearch(q, dropdown, coordDisplayId, latInputId, lngInputId, onSelect), 350);
+      });
+
+      input.addEventListener('focus', () => {
+        if (dropdown.children.length > 0) dropdown.classList.add('visible');
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.remove('visible');
+        }
+      });
+    }
+
+    async function geocodeSearch(query, dropdown, coordDisplayId, latInputId, lngInputId, onSelect) {
+      dropdown.innerHTML = '<div class="search-loading">Searching...</div>';
+      dropdown.classList.add('visible');
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/geocode?q=${encodeURIComponent(query)}&limit=5`);
+        const data = await resp.json();
+
+        if (!data.results || data.results.length === 0) {
+          dropdown.innerHTML = '<div class="search-loading">No results found</div>';
+          return;
+        }
+
+        dropdown.innerHTML = '';
+        data.results.forEach(r => {
+          const parts = r.display_name.split(',');
+          const mainText = parts.slice(0, 2).join(',').trim();
+          const subText = parts.slice(2, 4).join(',').trim();
+
+          const item = document.createElement('div');
+          item.className = 'search-item';
+          item.innerHTML = `<div class="main-text">${mainText}</div><div class="sub-text">${subText}</div>`;
+          item.addEventListener('click', () => {
+            document.getElementById(latInputId).value = r.lat;
+            document.getElementById(lngInputId).value = r.lng;
+            document.getElementById(coordDisplayId).textContent = `${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}`;
+
+            // Update the search input with the short name
+            const inputEl = dropdown.previousElementSibling?.previousElementSibling || dropdown.closest('.search-wrapper').querySelector('input');
+            if (inputEl) inputEl.value = mainText;
+
+            dropdown.classList.remove('visible');
+
+            if (onSelect) onSelect(r.lat, r.lng);
+
+            // Move map to location
+            map.setView([r.lat, r.lng], 15);
+            log(`📍 Location set: ${mainText} (${r.lat.toFixed(5)}, ${r.lng.toFixed(5)})`, 'info');
+          });
+          dropdown.appendChild(item);
+        });
+      } catch (e) {
+        dropdown.innerHTML = '<div class="search-loading">Search error</div>';
+      }
+    }
+
     // ========== Elevation color helper ==========
     function elevColor(elev, minElev, maxElev) {
       const range = maxElev - minElev || 1;
@@ -863,7 +1118,12 @@
       const btn = document.getElementById('generateBtn');
       btn.disabled = true;
       btn.textContent = 'Generating...';
-      log('Requesting route...', 'info');
+
+      if (routeMode === 'p2p') {
+        return generatePointToPoint();
+      }
+
+      log('Requesting loop route...', 'info');
 
       // Convert input distance to km for the API
       let distVal = parseFloat(document.getElementById('distanceInput').value);
@@ -883,6 +1143,63 @@
 
       try {
         const resp = await fetch(`${API_BASE}/api/v1/generate-route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        currentRouteData = data;
+
+        updateStats(data);
+        drawRouteOnMap(data);
+        drawElevationChart(data);
+
+        const props = data.route?.properties;
+        log(`Route generated: ${props?.distance_km} km, ↑${props?.ascend_m}m, ↓${props?.descend_m}m [${props?.profile_used}]`, 'success');
+      } catch (e) {
+        log(`Error: ${e.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Route';
+      }
+    }
+
+    // ========== Point-to-point route ==========
+    async function generatePointToPoint() {
+      const btn = document.getElementById('generateBtn');
+      const endLat = parseFloat(document.getElementById('endLat').value);
+      const endLng = parseFloat(document.getElementById('endLng').value);
+
+      if (!endLat || !endLng) {
+        log('Error: Please select an end destination', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Route';
+        return;
+      }
+
+      log('Requesting point-to-point route...', 'info');
+
+      const body = {
+        start: {
+          lat: parseFloat(document.getElementById('startLat').value),
+          lng: parseFloat(document.getElementById('startLng').value),
+        },
+        end: {
+          lat: endLat,
+          lng: endLng,
+        },
+        elevation_preference: selectedProfile,
+        avoid_traffic_signals: avoidSignals,
+      };
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/point-to-point`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -1258,6 +1575,15 @@
     window.addEventListener('load', () => {
       log('Elevation Visualizer ready');
       checkConnection();
+
+      // Set up address search for start and end locations
+      setupSearch('startSearch', 'startDropdown', 'startCoords', 'startLat', 'startLng', (lat, lng) => {
+        startCoord = { lat, lng };
+      });
+      setupSearch('endSearch', 'endDropdown', 'endCoords', 'endLat', 'endLng', (lat, lng) => {
+        endCoord = { lat, lng };
+      });
+
       // Force Leaflet to recalculate tile positions
       setTimeout(() => map.invalidateSize(), 200);
     });

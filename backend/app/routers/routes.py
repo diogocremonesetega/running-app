@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Literal
+import httpx
 
 from app.services import route_generator, graphhopper
 
@@ -89,6 +90,16 @@ async def point_to_point_route(req: PointToPointRequest):
         elevation_profile = graphhopper.extract_elevation_profile(best_path)
         slope_segments = graphhopper.extract_slope_segments(best_path)
 
+        # Compute elevation stats
+        elevation_stats = {}
+        if elevation_profile:
+            elevations = [p["elevation_m"] for p in elevation_profile]
+            elevation_stats = {
+                "min_elevation_m": min(elevations),
+                "max_elevation_m": max(elevations),
+                "elevation_range_m": round(max(elevations) - min(elevations), 1),
+            }
+
         return {
             "route": {
                 "type": "Feature",
@@ -104,10 +115,82 @@ async def point_to_point_route(req: PointToPointRequest):
                 },
             },
             "elevation_profile": elevation_profile,
+            "elevation_stats": elevation_stats,
             "slope_segments": slope_segments,
         }
     except graphhopper.GraphHopperError as e:
         raise HTTPException(status_code=502, detail=f"GraphHopper error: {e.detail}")
+
+
+@router.get("/geocode")
+async def geocode(q: str, limit: int = 5):
+    """Geocode an address/place name to coordinates using Nominatim.
+
+    Biased toward the Berkeley/Bay Area for best results.
+    """
+    if not q or len(q.strip()) < 2:
+        return {"results": []}
+
+    params = {
+        "q": q,
+        "format": "jsonv2",
+        "limit": min(limit, 8),
+        "addressdetails": 1,
+        "viewbox": "-122.35,37.95,-122.15,37.83",  # Berkeley/Oakland bounding box
+        "bounded": 0,  # Prefer but don't restrict to viewbox
+        "countrycodes": "us",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params=params,
+                headers={"User-Agent": "RunningRouteGenerator/1.0"},
+            )
+            data = resp.json()
+
+        results = []
+        for item in data:
+            results.append({
+                "display_name": item.get("display_name", ""),
+                "lat": float(item.get("lat", 0)),
+                "lng": float(item.get("lon", 0)),
+                "type": item.get("type", ""),
+                "category": item.get("category", ""),
+                "importance": item.get("importance", 0),
+            })
+
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Geocoding error: {str(e)}")
+
+
+@router.get("/reverse-geocode")
+async def reverse_geocode(lat: float, lng: float):
+    """Reverse geocode coordinates to an address using Nominatim."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    "lat": lat,
+                    "lon": lng,
+                    "format": "jsonv2",
+                    "addressdetails": 1,
+                },
+                headers={"User-Agent": "RunningRouteGenerator/1.0"},
+            )
+            data = resp.json()
+
+        return {
+            "display_name": data.get("display_name", ""),
+            "lat": float(data.get("lat", lat)),
+            "lng": float(data.get("lon", lng)),
+            "address": data.get("address", {}),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Reverse geocoding error: {str(e)}")
 
 
 @router.get("/profiles")
@@ -151,3 +234,4 @@ async def health():
         "backend": "ok",
         "graphhopper": gh_status,
     }
+

@@ -6,6 +6,8 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 
 ## ✨ Features
 
+- **Address Search** — Type any street name, park, or landmark to set your start/end location (powered by OpenStreetMap Nominatim geocoding)
+- **Loop & Point-to-Point Modes** — Toggle between circular loop routes and A-to-B point-to-point routes
 - **Elevation-Aware Routing** — 4 custom profiles that actively adjust routes based on terrain:
   - ⛰️ **Balanced** — Moderate hills for everyday runs
   - 🌊 **Flat Recovery** — Avoids hills for easy recovery days
@@ -15,7 +17,7 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 - **Elevation Profile Chart** — Interactive chart with hover-to-map sync
 - **Circle-Based Loop Routing** — Generates natural loop routes using waypoint circles
 - **Compass Direction Selector** — Choose which direction your route heads (N/NE/E/SE/S/SW/W/NW)
-- **km/miles Toggle** — Switch between metric and imperial units
+- **km/miles Toggle** — Switch between metric and imperial units (distance + elevation)
 - **SRTM 3D Elevation Data** — Real terrain data for accurate elevation profiles
 
 ## 🏗️ Architecture
@@ -25,13 +27,13 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 │  Browser UI  │────▶│  FastAPI      │────▶│  GraphHopper     │
 │  (Leaflet)   │◀────│  Backend      │◀────│  Routing Engine  │
 │  :8000       │     │  :8000        │     │  :8080           │
-└─────────────┘     └──────────────┘     └──────────────────┘
-                                               │
-                                          ┌────┴─────┐
-                                          │ NorCal   │
-                                          │ OSM Data │
-                                          │ + SRTM   │
-                                          └──────────┘
+└─────────────┘     └──────┬───────┘     └──────────────────┘
+                           │                    │
+                      ┌────┴─────┐         ┌────┴─────┐
+                      │ Nominatim│         │ NorCal   │
+                      │ Geocoding│         │ OSM Data │
+                      └──────────┘         │ + SRTM   │
+                                           └──────────┘
 ```
 
 ## 🚀 Quick Start
@@ -115,6 +117,8 @@ running-route-generator/
 |--------|---------------------------|--------------------------------|
 | POST   | `/api/v1/generate-route`  | Generate a loop route          |
 | POST   | `/api/v1/point-to-point`  | Route between two points       |
+| GET    | `/api/v1/geocode?q=...`   | Address search (Nominatim)     |
+| GET    | `/api/v1/reverse-geocode` | Coordinates → address          |
 | GET    | `/api/v1/profiles`        | List available routing profiles|
 | GET    | `/api/v1/health`          | Health check + GH status       |
 
@@ -155,6 +159,7 @@ Tests verify: GraphHopper connection, 3D elevation data, loop route closure, ele
 
 - **Routing**: [GraphHopper 10.0](https://www.graphhopper.com/) with custom foot profiles
 - **Elevation**: SRTM DEM 3-arc-second data
+- **Geocoding**: [Nominatim](https://nominatim.openstreetmap.org/) (OpenStreetMap)
 - **Backend**: Python FastAPI + httpx
 - **Frontend**: Vanilla HTML/CSS/JS + Leaflet.js + CartoDB Dark Matter tiles
 - **Map Data**: OpenStreetMap (NorCal region)
