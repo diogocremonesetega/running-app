@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 import httpx
 
-from app.services import route_generator, graphhopper
+from app.services import route_generator, graphhopper, police_data
 
 router = APIRouter(prefix="/api/v1", tags=["routes"])
 
@@ -24,6 +24,7 @@ class GenerateRouteRequest(BaseModel):
     distance_km: float = Field(5.0, gt=0.5, le=50, description="Target distance in km")
     elevation_preference: Literal["flat", "moderate", "hilly"] = "moderate"
     avoid_traffic_signals: bool = False
+    prioritize_safety: bool = False
     num_waypoints: int = Field(5, ge=3, le=12, description="Circle waypoints")
     start_bearing: float = Field(0.0, ge=0, lt=360, description="Initial bearing offset")
 
@@ -52,6 +53,7 @@ async def generate_route(req: GenerateRouteRequest):
             distance_km=req.distance_km,
             elevation_preference=req.elevation_preference,
             avoid_traffic_signals=req.avoid_traffic_signals,
+            prioritize_safety=req.prioritize_safety,
             num_waypoints=req.num_waypoints,
             start_bearing=req.start_bearing,
         )
@@ -234,4 +236,18 @@ async def health():
         "backend": "ok",
         "graphhopper": gh_status,
     }
+
+
+@router.get("/safety-data")
+async def get_safety_data():
+    """Return police incident data for the map heatmap and danger zones."""
+    try:
+        data = await police_data.fetch_safety_data()
+        zones = police_data.get_danger_zones(data)
+        return {
+            "incidents": data,
+            "danger_zones": zones
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 

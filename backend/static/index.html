@@ -827,7 +827,23 @@
       <div class="control-group">
         <div class="toggle-group">
           <label>Avoid Traffic Signals</label>
-          <div class="toggle" id="toggleSignals" onclick="toggleSwitch(this)"></div>
+          <div class="toggle" id="toggleSignals" onclick="toggleSwitch(this, 'signals')"></div>
+        </div>
+        <div class="toggle-group" style="margin-top: 8px;">
+          <label>Prioritize Safety (Avoid Danger Zones)</label>
+          <div class="toggle" id="toggleSafety" onclick="toggleSwitch(this, 'safety')"></div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label style="margin-bottom: 2px;">Map Overlays</label>
+        <div class="toggle-group">
+          <label>Show Crime Heatmap</label>
+          <div class="toggle active" id="toggleHeatmapOverlay" onclick="toggleOverlay(this, 'heatmap')"></div>
+        </div>
+        <div class="toggle-group" style="margin-top: 8px;">
+          <label>Show Traffic Lights</label>
+          <div class="toggle active" id="toggleSignalsOverlay" onclick="toggleOverlay(this, 'signals')"></div>
         </div>
       </div>
 
@@ -906,14 +922,21 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Leaflet Heatmap -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
   <script>
     // ========== State ==========
     const API_BASE = '';
     let selectedProfile = 'moderate';
     let avoidSignals = false;
+    let prioritizeSafety = false;
     let currentRouteData = null;
     let routeLayerGroup = null;
+    let signalLayerGroup = null;
+    let heatmapOverlay = null;
+    let showHeatmapOverlay = true;
+    let showSignalsOverlay = true;
     let elevationMarker = null;
     let selectedBearing = 0;
     let currentUnit = 'km'; // 'km' or 'mi'
@@ -971,9 +994,28 @@
       selectedProfile = el.dataset.profile;
     }
 
-    function toggleSwitch(el) {
+    function toggleSwitch(el, type) {
       el.classList.toggle('active');
-      avoidSignals = el.classList.contains('active');
+      if (type === 'signals') avoidSignals = el.classList.contains('active');
+      if (type === 'safety') prioritizeSafety = el.classList.contains('active');
+    }
+
+    function toggleOverlay(el, type) {
+      el.classList.toggle('active');
+      const isActive = el.classList.contains('active');
+      if (type === 'heatmap') {
+        showHeatmapOverlay = isActive;
+        if (heatmapOverlay) {
+          if (isActive) map.addLayer(heatmapOverlay);
+          else map.removeLayer(heatmapOverlay);
+        }
+      } else if (type === 'signals') {
+        showSignalsOverlay = isActive;
+        if (signalLayerGroup) {
+          if (isActive) map.addLayer(signalLayerGroup);
+          else map.removeLayer(signalLayerGroup);
+        }
+      }
     }
 
     function selectDirection(el) {
@@ -1137,6 +1179,7 @@
         distance_km: distVal,
         elevation_preference: selectedProfile,
         avoid_traffic_signals: avoidSignals,
+        prioritize_safety: prioritizeSafety,
         num_waypoints: parseInt(document.getElementById('numWaypoints').value),
         start_bearing: selectedBearing,
       };
@@ -1196,6 +1239,7 @@
         },
         elevation_preference: selectedProfile,
         avoid_traffic_signals: avoidSignals,
+        prioritize_safety: prioritizeSafety,
       };
 
       try {
@@ -1243,7 +1287,8 @@
           },
           distance_km: distVal,
           elevation_preference: prof,
-          avoid_traffic_signals: false,
+          avoid_traffic_signals: avoidSignals,
+          prioritize_safety: prioritizeSafety,
           num_waypoints: parseInt(document.getElementById('numWaypoints').value),
           start_bearing: selectedBearing,
         };
@@ -1386,6 +1431,47 @@
       // Fit bounds with padding
       const bounds = L.latLngBounds(fullLatLngs);
       map.fitBounds(bounds, { padding: [40, 40] });
+
+      // Fetch and display traffic signals
+      fetchTrafficSignals(bounds);
+    }
+
+    async function fetchTrafficSignals(bounds) {
+      if (!signalLayerGroup) {
+        signalLayerGroup = L.layerGroup();
+      }
+
+      if (showSignalsOverlay) {
+        map.addLayer(signalLayerGroup);
+      } else {
+        map.removeLayer(signalLayerGroup);
+      }
+
+      signalLayerGroup.clearLayers();
+
+      const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+      const query = `[out:json][timeout:5];node["highway"="traffic_signals"](${bbox});out body;`;
+      try {
+        const resp = await fetch(`https://overpass-api.de/api/interpreter`, {
+          method: 'POST',
+          body: query
+        });
+        const data = await resp.json();
+        data.elements.forEach(node => {
+          const marker = L.circleMarker([node.lat, node.lon], {
+            radius: 4,
+            fillColor: '#f59e0b', // Accent orange
+            fillOpacity: 1,
+            color: '#fff',
+            weight: 1
+          });
+          marker.bindPopup('🚦 Traffic Signal');
+          signalLayerGroup.addLayer(marker);
+        });
+        log(`Loaded ${data.elements.length} traffic signals in area.`, 'info');
+      } catch (e) {
+        log('Could not load traffic signals.', 'error');
+      }
     }
 
     // ========== Highlight point on map from chart hover ==========
@@ -1572,7 +1658,7 @@
     }
 
     // ========== Init ==========
-    window.addEventListener('load', () => {
+    window.addEventListener('load', async () => {
       log('Elevation Visualizer ready');
       checkConnection();
 
@@ -1583,6 +1669,32 @@
       setupSearch('endSearch', 'endDropdown', 'endCoords', 'endLat', 'endLng', (lat, lng) => {
         endCoord = { lat, lng };
       });
+
+      // Fetch safety data and draw heatmap / danger zones
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/safety-data`);
+        const data = await resp.json();
+
+        // Heatmap
+        if (data.incidents && L.heatLayer) {
+          const heatPoints = data.incidents.map(inc => [inc.lat, inc.lng, inc.weight || 0.5]);
+          heatmapOverlay = L.heatLayer(heatPoints, {
+            radius: 25,
+            blur: 15,
+            maxZoom: 15,
+            max: 1.0,
+            minOpacity: 0.3,
+            gradient: { 0.4: 'yellow', 0.65: 'orange', 1: 'red' }
+          });
+          if (showHeatmapOverlay) {
+            heatmapOverlay.addTo(map);
+          }
+          log(`Loaded safety data overlay.`, 'success');
+        }
+      } catch (e) {
+        log('Failed to load safety data overlay', 'error');
+        console.error(e);
+      }
 
       // Force Leaflet to recalculate tile positions
       setTimeout(() => map.invalidateSize(), 200);

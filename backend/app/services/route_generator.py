@@ -116,6 +116,7 @@ async def generate_loop_route(
     distance_km: float,
     elevation_preference: str = "moderate",
     avoid_traffic_signals: bool = False,
+    prioritize_safety: bool = False,
     num_waypoints: int = 5,
     start_bearing: float = 0.0,
 ) -> dict[str, Any]:
@@ -156,12 +157,53 @@ async def generate_loop_route(
     profile = _select_profile(elevation_preference, avoid_traffic_signals)
 
     # 4. Call GraphHopper
-    gh_response = await graphhopper.get_route(
-        waypoints=all_waypoints,
-        profile=profile,
-        elevation=True,
-        details=["average_slope"],
-    )
+    custom_model = None
+    if prioritize_safety:
+        from app.services import police_data
+        incidents = await police_data.fetch_safety_data()
+        zones = police_data.get_danger_zones(incidents)
+        if zones:
+            areas = {}
+            priority_rules = []
+            for i, z in enumerate(zones):
+                area_id = f"danger_zone_{i}"
+                areas[area_id] = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [z["min_lng"], z["min_lat"]],
+                            [z["max_lng"], z["min_lat"]],
+                            [z["max_lng"], z["max_lat"]],
+                            [z["min_lng"], z["max_lat"]],
+                            [z["min_lng"], z["min_lat"]],
+                        ]]
+                    }
+                }
+                priority_rules.append({
+                    "if": f"in_{area_id}",
+                    "multiply_by": "0.1"
+                })
+            custom_model = {
+                "areas": areas,
+                "priority": priority_rules
+            }
+
+    if custom_model:
+        gh_response = await graphhopper.post_route_with_custom_model(
+            waypoints=all_waypoints,
+            profile=profile,
+            custom_model=custom_model,
+            elevation=True,
+            details=["average_slope"],
+        )
+    else:
+        gh_response = await graphhopper.get_route(
+            waypoints=all_waypoints,
+            profile=profile,
+            elevation=True,
+            details=["average_slope"],
+        )
 
     # 5. Parse the best path
     if not gh_response.get("paths"):
@@ -191,6 +233,7 @@ async def generate_loop_route(
                 "profile_used": profile,
                 "elevation_preference": elevation_preference,
                 "avoid_traffic_signals": avoid_traffic_signals,
+                "prioritize_safety": prioritize_safety,
             },
         },
         "elevation_profile": elevation_profile,
