@@ -182,7 +182,7 @@ async def generate_loop_route(
                 }
                 priority_rules.append({
                     "if": f"in_{area_id}",
-                    "multiply_by": "0.1"
+                    "multiply_by": "0.4"
                 })
             custom_model = {
                 "areas": areas,
