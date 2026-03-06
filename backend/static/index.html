@@ -61,6 +61,7 @@
       font-weight: 600;
       background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -833,6 +834,10 @@
           <label>Prioritize Safety (Avoid Danger Zones)</label>
           <div class="toggle" id="toggleSafety" onclick="toggleSwitch(this, 'safety')"></div>
         </div>
+        <div class="toggle-group" style="margin-top: 8px;">
+          <label>Avoid Unlit Streets (Night Run)</label>
+          <div class="toggle" id="toggleUnlit" onclick="toggleSwitch(this, 'unlit')"></div>
+        </div>
       </div>
 
       <div class="control-group">
@@ -844,6 +849,17 @@
         <div class="toggle-group" style="margin-top: 8px;">
           <label>Show Traffic Lights</label>
           <div class="toggle active" id="toggleSignalsOverlay" onclick="toggleOverlay(this, 'signals')"></div>
+        </div>
+      </div>
+
+      <div class="control-group" id="weatherWidget"
+        style="display: none; padding: 10px; background: rgba(74, 144, 217, 0.08); border-radius: 8px; border: 1px solid var(--border); margin-top: 4px; margin-bottom: 8px;">
+        <label style="margin-bottom: 4px;">Weather & Air Quality</label>
+        <div style="font-size: 13px; color: var(--text-primary); display: flex; justify-content: space-between;">
+          <span>🌡️ <span id="weatherTemp">—</span></span>
+          <span>💨 AQI: <span id="weatherAqi">—</span></span>
+        </div>
+        <div id="weatherWarning" style="color: var(--accent-orange); font-size: 11px; margin-top: 6px; display: none;">
         </div>
       </div>
 
@@ -931,6 +947,7 @@
     let selectedProfile = 'moderate';
     let avoidSignals = false;
     let prioritizeSafety = false;
+    let avoidUnlitStreets = false;
     let currentRouteData = null;
     let routeLayerGroup = null;
     let signalLayerGroup = null;
@@ -998,6 +1015,7 @@
       el.classList.toggle('active');
       if (type === 'signals') avoidSignals = el.classList.contains('active');
       if (type === 'safety') prioritizeSafety = el.classList.contains('active');
+      if (type === 'unlit') avoidUnlitStreets = el.classList.contains('active');
     }
 
     function toggleOverlay(el, type) {
@@ -1180,6 +1198,7 @@
         elevation_preference: selectedProfile,
         avoid_traffic_signals: avoidSignals,
         prioritize_safety: prioritizeSafety,
+        avoid_unlit_streets: avoidUnlitStreets,
         num_waypoints: parseInt(document.getElementById('numWaypoints').value),
         start_bearing: selectedBearing,
       };
@@ -1240,6 +1259,7 @@
         elevation_preference: selectedProfile,
         avoid_traffic_signals: avoidSignals,
         prioritize_safety: prioritizeSafety,
+        avoid_unlit_streets: avoidUnlitStreets,
       };
 
       try {
@@ -1339,6 +1359,38 @@
       document.getElementById('statDescend').innerHTML = `${descend ?? '—'}<span class="unit"> ${elevUnit}</span>`;
       document.getElementById('statTime').innerHTML = `${p.time_min ?? '—'}<span class="unit"> min</span>`;
       document.getElementById('statRange').innerHTML = `${range ?? '—'}<span class="unit"> ${elevUnit}</span>`;
+
+      // Update Weather Widget
+      if (data.environmental_conditions) {
+        const env = data.environmental_conditions;
+        document.getElementById('weatherWidget').style.display = 'block';
+        if (env.temperature_c !== null) {
+          let temp = env.temperature_c;
+          let tempUnit = '°C';
+          if (currentUnit === 'mi') {
+            temp = (temp * 9 / 5) + 32;
+            tempUnit = '°F';
+          }
+          document.getElementById('weatherTemp').textContent = `${Math.round(temp)}${tempUnit}`;
+        } else {
+          document.getElementById('weatherTemp').textContent = '—';
+        }
+        if (env.us_aqi !== null) {
+          document.getElementById('weatherAqi').textContent = env.us_aqi;
+        } else {
+          document.getElementById('weatherAqi').textContent = '—';
+        }
+        const warnEl = document.getElementById('weatherWarning');
+        if (env.aqi_warning && env.us_aqi !== null) {
+          warnEl.style.display = 'block';
+          warnEl.textContent = `⚠️ Poor Air Quality (AQI: ${env.us_aqi})`;
+        } else if (env.weather_warning) {
+          warnEl.style.display = 'block';
+          warnEl.textContent = '⚠️ Extreme Weather or Heavy Precipitation Detected';
+        } else {
+          warnEl.style.display = 'none';
+        }
+      }
     }
 
     // ========== Draw route on Leaflet map ==========
