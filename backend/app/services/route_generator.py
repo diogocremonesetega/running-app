@@ -159,36 +159,36 @@ async def generate_loop_route(
 
     # 4. Call GraphHopper
     custom_model: dict[str, Any] | None = None
+
+    # --- Safety zones (PostGIS) ---
     if prioritize_safety:
-        from app.services import police_data
-        incidents = await police_data.fetch_safety_data()
-        zones = police_data.get_danger_zones(incidents)
-        if zones:
+        from app.services import spatial_queries
+        safety_zones = await spatial_queries.get_active_safety_zones(start_lat, start_lng, radius_m=5000)
+        if safety_zones:
             areas = {}
             priority_rules = []
-            for i, z in enumerate(zones):
-                area_id = f"danger_zone_{i}"
-                areas[area_id] = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [z["min_lng"], z["min_lat"]],
-                            [z["max_lng"], z["min_lat"]],
-                            [z["max_lng"], z["max_lat"]],
-                            [z["min_lng"], z["max_lat"]],
-                            [z["min_lng"], z["min_lat"]],
-                        ]]
-                    }
-                }
-                priority_rules.append({
-                    "if": f"in_{area_id}",
-                    "multiply_by": "0.4"
-                })
-            custom_model = {
-                "areas": areas,
-                "priority": priority_rules
-            }
+            for z in safety_zones:
+                import json as _json
+                geojson = _json.loads(z["geojson"])
+                area_id = z["id"]
+                areas[area_id] = {"type": "Feature", "geometry": geojson}
+                # Heavier penalty for lower SQI scores
+                penalty = round(max(0.1, z["safety_score"] / 100), 2)
+                priority_rules.append({"if": f"in_{area_id}", "multiply_by": str(penalty)})
+            custom_model = {"areas": areas, "priority": priority_rules}
+
+    # --- Closure zones (PostGIS) — always merged when available ---
+    from app.services import spatial_queries as _sq
+    closure_zones = await _sq.get_active_closures(start_lat, start_lng, radius_m=5000)
+    if closure_zones:
+        if custom_model is None:
+            custom_model = {"areas": {}, "priority": []}
+        import json as _json
+        for z in closure_zones:
+            geojson = _json.loads(z["geojson"])
+            area_id = z["id"]
+            custom_model["areas"][area_id] = {"type": "Feature", "geometry": geojson}
+            custom_model["priority"].append({"if": f"in_{area_id}", "multiply_by": "0"})
 
     if avoid_unlit_streets:
         from app.services import lighting_data

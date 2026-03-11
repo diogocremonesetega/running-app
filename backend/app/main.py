@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,10 +10,20 @@ import os
 
 from app.routers import routes
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background workers on startup."""
+    from app.workers.data_ingest import start_background_workers
+    await start_background_workers()
+    yield
+
+
 app = FastAPI(
     title="Running Route Generator",
     description="Elevation-aware running route generation with traffic signal avoidance",
-    version="0.1.0",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS — allow all origins for development

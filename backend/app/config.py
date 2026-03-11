@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # PostGIS database URL
     database_url: str = "postgresql+asyncpg://routegen:securepassword@localhost:5432/routegen_db"
 
+    # 511 SF Bay API key (optional — get free key at https://511.org/open-data/token)
+    bay511_api_key: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

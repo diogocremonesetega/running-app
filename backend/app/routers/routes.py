@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 import httpx
 
-from app.services import route_generator, graphhopper, police_data, weather_data
+from app.services import route_generator, graphhopper, spatial_queries, weather_data
 
 router = APIRouter(prefix="/api/v1", tags=["routes"])
 
@@ -246,16 +246,50 @@ async def health():
     }
 
 
-@router.get("/safety-data")
-async def get_safety_data():
-    """Return police incident data for the map heatmap and danger zones."""
+
+@router.get("/safety-overlay")
+async def safety_overlay(lat: float, lng: float, radius_m: float = 5000):
+    """Return current safety zones and road closures near a location as GeoJSON.
+
+    Frontend uses this to render hazard overlays on the map. Data is sourced
+    from PostGIS (populated by background workers every 30 minutes).
+    """
     try:
-        data = await police_data.fetch_safety_data()
-        zones = police_data.get_danger_zones(data)
+        safety_zones = await spatial_queries.get_active_safety_zones(lat, lng, radius_m)
+        closure_zones = await spatial_queries.get_active_closures(lat, lng, radius_m)
+        
+        import json as _json
+        features = []
+        for z in safety_zones:
+            features.append({
+                "type": "Feature",
+                "geometry": _json.loads(z["geojson"]),
+                "properties": {
+                    "zone_type": "safety",
+                    "source": z["source"],
+                    "safety_score": z["safety_score"],
+                }
+            })
+        for z in closure_zones:
+            features.append({
+                "type": "Feature",
+                "geometry": _json.loads(z["geojson"]),
+                "properties": {
+                    "zone_type": "closure",
+                    "source": z["source"],
+                    "closure_type": z["closure_type"],
+                    "description": z["description"],
+                }
+            })
+        
         return {
-            "incidents": data,
-            "danger_zones": zones
+            "type": "FeatureCollection",
+            "features": features,
+            "meta": {
+                "safety_zone_count": len(safety_zones),
+                "closure_zone_count": len(closure_zones),
+                "radius_m": radius_m,
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

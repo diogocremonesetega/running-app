@@ -1,0 +1,1 @@
+from app.workers.data_ingest import start_background_workers
