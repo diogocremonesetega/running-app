@@ -34,6 +34,7 @@ async def start_background_workers() -> None:
     """
     from app.services.crime import refresh_safety_zones
     from app.services.construction import refresh_closure_zones
+    from app.services.scenic import refresh_scenic_segments
 
     asyncio.create_task(
         _run_periodic(refresh_safety_zones, DEFAULT_INTERVAL, "safety_zones"),
@@ -42,5 +43,10 @@ async def start_background_workers() -> None:
     asyncio.create_task(
         _run_periodic(refresh_closure_zones, DEFAULT_INTERVAL, "closure_zones"),
         name="refresh_closure_zones",
+    )
+    # Scenic data changes slowly — refresh every 6 hours
+    asyncio.create_task(
+        _run_periodic(refresh_scenic_segments, 6 * 3600, "scenic_segments"),
+        name="refresh_scenic_segments",
     )
     logger.info("Background data ingestion workers started.")

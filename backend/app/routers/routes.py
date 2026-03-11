@@ -26,6 +26,7 @@ class GenerateRouteRequest(BaseModel):
     avoid_traffic_signals: bool = False
     prioritize_safety: bool = False
     avoid_unlit_streets: bool = False
+    prefer_scenic: bool = False
     num_waypoints: int = Field(5, ge=3, le=12, description="Circle waypoints")
     start_bearing: float = Field(0.0, ge=0, lt=360, description="Initial bearing offset")
 
@@ -57,6 +58,7 @@ async def generate_route(req: GenerateRouteRequest):
             avoid_traffic_signals=req.avoid_traffic_signals,
             prioritize_safety=req.prioritize_safety,
             avoid_unlit_streets=req.avoid_unlit_streets,
+            prefer_scenic=req.prefer_scenic,
             num_waypoints=req.num_waypoints,
             start_bearing=req.start_bearing,
         )
@@ -290,6 +292,38 @@ async def safety_overlay(lat: float, lng: float, radius_m: float = 5000):
                 "closure_zone_count": len(closure_zones),
                 "radius_m": radius_m,
             }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/weather-advisory")
+async def weather_advisory(lat: float, lng: float):
+    """Return run comfort score, weather conditions, and optimal start bearing.
+
+    Comfort score:
+      80-100 → Excellent  🟢
+      60-79  → Good       🟡
+      40-59  → Fair       🟠
+       0-39  → Poor       🔴
+
+    `optimal_start_bearing` points INTO the wind so you finish with a tailwind.
+    """
+    try:
+        conditions = await weather_data.fetch_current_conditions(lat, lng)
+        return {
+            "comfort_score": conditions["comfort_score"],
+            "comfort_label": conditions["comfort_label"],
+            "temperature_c": conditions["temperature_c"],
+            "precipitation_mm": conditions["precipitation_mm"],
+            "wind_speed_kmh": conditions["wind_speed_kmh"],
+            "wind_direction_deg": conditions["wind_direction_deg"],
+            "us_aqi": conditions["us_aqi"],
+            "optimal_start_bearing": conditions["optimal_start_bearing"],
+            "warnings": {
+                "weather": conditions["weather_warning"],
+                "air_quality": conditions["aqi_warning"],
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

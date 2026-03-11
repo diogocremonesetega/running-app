@@ -118,6 +118,7 @@ async def generate_loop_route(
     avoid_traffic_signals: bool = False,
     prioritize_safety: bool = False,
     avoid_unlit_streets: bool = False,
+    prefer_scenic: bool = False,
     num_waypoints: int = 5,
     start_bearing: float = 0.0,
 ) -> dict[str, Any]:
@@ -190,7 +191,29 @@ async def generate_loop_route(
             custom_model["areas"][area_id] = {"type": "Feature", "geometry": geojson}
             custom_model["priority"].append({"if": f"in_{area_id}", "multiply_by": "0"})
 
-    if avoid_unlit_streets:
+    # --- Scenic segments (PostGIS) --- boost priority on parks/trails
+    if prefer_scenic:
+        from app.services import spatial_queries as _sq2
+        scenic_segs = await _sq2.get_scenic_segments_near(start_lat, start_lng, radius_m=4000)
+        if scenic_segs:
+            if custom_model is None:
+                custom_model = {"areas": {}, "priority": []}
+            import json as _json2
+            for s in scenic_segs:
+                import json as _json3
+                geojson = _json3.loads(s["geojson"])
+                # Buffer linestring to polygon for GraphHopper areas
+                from shapely.geometry import shape, mapping
+                geom = shape(geojson)
+                buffered = geom.buffer(0.0001)  # ~11m buffer
+                area_id = s["id"]
+                custom_model["areas"][area_id] = {
+                    "type": "Feature",
+                    "geometry": mapping(buffered),
+                }
+                boost = round(1.0 + (s["gvi_score"] * 2), 1)  # 1.7 – 3.0
+                custom_model["priority"].append({"if": f"in_{area_id}", "multiply_by": str(boost)})
+
         from app.services import lighting_data
         
         # calculate bounding box of all waypoints to query OSM
