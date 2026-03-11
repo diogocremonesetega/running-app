@@ -84,7 +84,7 @@ async def refresh_scenic_segments(bbox: str = DEFAULT_BBOX) -> int:
     query = _build_overpass_query(bbox)
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(OVERPASS_URL, data=query)
             resp.raise_for_status()
             data = resp.json()

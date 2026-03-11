@@ -73,16 +73,17 @@ pip install -r requirements.txt
 cd ..
 ```
 
-### 3. Start Everything (Unified Script)
+### 3. Start & Stop (Unified Scripts)
 
-We use a unified startup script to launch PostGIS (via Docker), GraphHopper (natively via Java to avoid macOS VirtioFS performance issues), and the FastAPI backend.
+We use unified scripts to manage PostGIS (via Docker), GraphHopper (natively via Java), and the FastAPI backend.
 
 ```bash
 # from the repository root
-./start.sh
+./start.sh    # Launch everything
+./stop.sh     # Shut everything down
 ```
 
-Wait until you see `[OK] All services running!`
+Wait until you see `[OK] All services running!` on start.
 
 ### 4. Open the Visualizer
 
@@ -119,14 +120,16 @@ running-route-generator/
 
 ## 🔌 API Endpoints
 
-| Method | Endpoint                  | Description                    |
-|--------|---------------------------|--------------------------------|
-| POST   | `/api/v1/generate-route`  | Generate a loop route          |
-| POST   | `/api/v1/point-to-point`  | Route between two points       |
-| GET    | `/api/v1/geocode?q=...`   | Address search (Nominatim)     |
-| GET    | `/api/v1/reverse-geocode` | Coordinates → address          |
-| GET    | `/api/v1/profiles`        | List available routing profiles|
-| GET    | `/api/v1/health`          | Health check + GH status       |
+| Method | Endpoint                  | Description                        |
+|--------|---------------------------|------------------------------------|
+| POST   | `/api/v1/generate-route`  | Generate a loop route              |
+| POST   | `/api/v1/point-to-point`  | Route between two points           |
+| GET    | `/api/v1/weather-advisory`| Get comfort score, wind, & AQI     |
+| GET    | `/api/v1/safety-overlay`  | Get GeoJSON crime/safety zones     |
+| GET    | `/api/v1/geocode?q=...`   | Address search (Nominatim)         |
+| GET    | `/api/v1/reverse-geocode` | Coordinates → address              |
+| GET    | `/api/v1/profiles`        | List available routing profiles    |
+| GET    | `/api/v1/health`          | Health check + GH status           |
 
 ### Generate Route Example
 
@@ -160,6 +163,13 @@ Tests verify: GraphHopper connection, 3D elevation data, loop route closure, ele
 | Hill Training | 242.0 m   | 7.05 km  |
 
 > The flat profile produces **17% less elevation gain** than the hilly profile for the same loop.
+
+## 🛡️ Resilience & Background Workers
+
+The application features self-healing background workers that:
+- Refresh crime and construction data every 30 minutes.
+- Refresh scenic/nature segments every 6 hours.
+- **Fail-fast & Retry**: If the public Overpass API times out (504), workers will retry every 60 seconds until data is successfully synchronized.
 
 ## 🛠️ Tech Stack
 

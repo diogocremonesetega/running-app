@@ -16,14 +16,20 @@ DEFAULT_INTERVAL = 1800
 
 
 async def _run_periodic(task_fn: Callable[[], Coroutine[Any, Any, int]], interval: int, name: str) -> None:
-    """Run `task_fn` immediately, then repeat every `interval` seconds."""
+    """Run `task_fn` immediately, then repeat every `interval` seconds.
+    
+    If the task fails, it retries after a shorter 60-second delay instead of 
+    waiting the full interval.
+    """
+    retry_interval = 60  # Retry quickly on failure
     while True:
         try:
             count = await task_fn()
             logger.info(f"[{name}] refreshed {count} zones.")
+            await asyncio.sleep(interval)
         except Exception as exc:
-            logger.error(f"[{name}] refresh failed: {exc}")
-        await asyncio.sleep(interval)
+            logger.error(f"[{name}] refresh failed: {exc}. Retrying in {retry_interval}s...")
+            await asyncio.sleep(retry_interval)
 
 
 async def start_background_workers() -> None:

@@ -25,7 +25,7 @@ async def fetch_unlit_streets(bbox: str) -> List[Dict[str, float]]:
     zones = []
     
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, data=query)
             resp.raise_for_status()
             data = resp.json()

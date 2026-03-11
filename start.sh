@@ -56,8 +56,11 @@ if [[ "$1" != "--no-backend" ]]; then
   info "Running Alembic migrations..."
   cd "$BACKEND_DIR"
   export PYTHONPATH=.
-  source .venv/bin/activate 2>/dev/null || true
-  alembic upgrade head
+  # Ensure the virtual environment is used if it exists
+  if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+  fi
+  python3 -m alembic upgrade head
 
   info "Starting FastAPI backend on http://localhost:8000"
   python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
