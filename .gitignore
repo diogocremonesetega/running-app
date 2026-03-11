@@ -27,3 +27,11 @@ graphhopper/*.jar
 
 # OS
 Thumbs.db
+
+# Logs
+*.log
+backend/uvicorn.log
+backend/pip.log
+
+# Alembic
+backend/alembic/versions/__pycache__/

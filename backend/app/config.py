@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     debug: bool = True
+    
+    # PostGIS database URL
+    database_url: str = "postgresql+asyncpg://routegen:securepassword@localhost:5432/routegen_db"
 
     class Config:
         env_file = ".env"

@@ -117,6 +117,7 @@ async def generate_loop_route(
     elevation_preference: str = "moderate",
     avoid_traffic_signals: bool = False,
     prioritize_safety: bool = False,
+    avoid_unlit_streets: bool = False,
     num_waypoints: int = 5,
     start_bearing: float = 0.0,
 ) -> dict[str, Any]:
@@ -157,7 +158,7 @@ async def generate_loop_route(
     profile = _select_profile(elevation_preference, avoid_traffic_signals)
 
     # 4. Call GraphHopper
-    custom_model = None
+    custom_model: dict[str, Any] | None = None
     if prioritize_safety:
         from app.services import police_data
         incidents = await police_data.fetch_safety_data()
@@ -188,6 +189,42 @@ async def generate_loop_route(
                 "areas": areas,
                 "priority": priority_rules
             }
+
+    if avoid_unlit_streets:
+        from app.services import lighting_data
+        
+        # calculate bounding box of all waypoints to query OSM
+        lats = [wp[0] for wp in all_waypoints]
+        lngs = [wp[1] for wp in all_waypoints]
+        min_lat, max_lat = min(lats) - 0.005, max(lats) + 0.005
+        min_lng, max_lng = min(lngs) - 0.005, max(lngs) + 0.005
+        bbox = f"{min_lat},{min_lng},{max_lat},{max_lng}"
+        
+        unlit_zones = await lighting_data.fetch_unlit_streets(bbox)
+        
+        if unlit_zones:
+            if custom_model is None:
+                custom_model = {"areas": {}, "priority": []}
+                
+            for i, z in enumerate(unlit_zones):
+                area_id = f"unlit_zone_{i}"
+                custom_model["areas"][area_id] = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [z["min_lng"], z["min_lat"]],
+                            [z["max_lng"], z["min_lat"]],
+                            [z["max_lng"], z["max_lat"]],
+                            [z["min_lng"], z["max_lat"]],
+                            [z["min_lng"], z["min_lat"]],
+                        ]]
+                    }
+                }
+                custom_model["priority"].append({
+                    "if": f"in_{area_id}",
+                    "multiply_by": "0.2"
+                })
 
     if custom_model:
         gh_response = await graphhopper.post_route_with_custom_model(
@@ -234,6 +271,7 @@ async def generate_loop_route(
                 "elevation_preference": elevation_preference,
                 "avoid_traffic_signals": avoid_traffic_signals,
                 "prioritize_safety": prioritize_safety,
+                "avoid_unlit_streets": avoid_unlit_streets,
             },
         },
         "elevation_profile": elevation_profile,

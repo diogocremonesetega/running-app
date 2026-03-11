@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 import httpx
 
-from app.services import route_generator, graphhopper, police_data
+from app.services import route_generator, graphhopper, police_data, weather_data
 
 router = APIRouter(prefix="/api/v1", tags=["routes"])
 
@@ -25,6 +25,7 @@ class GenerateRouteRequest(BaseModel):
     elevation_preference: Literal["flat", "moderate", "hilly"] = "moderate"
     avoid_traffic_signals: bool = False
     prioritize_safety: bool = False
+    avoid_unlit_streets: bool = False
     num_waypoints: int = Field(5, ge=3, le=12, description="Circle waypoints")
     start_bearing: float = Field(0.0, ge=0, lt=360, description="Initial bearing offset")
 
@@ -35,6 +36,7 @@ class PointToPointRequest(BaseModel):
     end: Coordinate
     elevation_preference: Literal["flat", "moderate", "hilly"] = "moderate"
     avoid_traffic_signals: bool = False
+    avoid_unlit_streets: bool = False
 
 
 # --- Endpoints ---
@@ -54,9 +56,15 @@ async def generate_route(req: GenerateRouteRequest):
             elevation_preference=req.elevation_preference,
             avoid_traffic_signals=req.avoid_traffic_signals,
             prioritize_safety=req.prioritize_safety,
+            avoid_unlit_streets=req.avoid_unlit_streets,
             num_waypoints=req.num_waypoints,
             start_bearing=req.start_bearing,
         )
+        
+        # Append environmental conditions to the response
+        env_data = await weather_data.fetch_current_conditions(req.start.lat, req.start.lng)
+        result["environmental_conditions"] = env_data
+        
         return result
     except graphhopper.GraphHopperError as e:
         raise HTTPException(status_code=502, detail=f"GraphHopper error: {e.detail}")

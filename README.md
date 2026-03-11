@@ -19,6 +19,8 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 - **Compass Direction Selector** — Choose which direction your route heads (N/NE/E/SE/S/SW/W/NW)
 - **km/miles Toggle** — Switch between metric and imperial units (distance + elevation)
 - **SRTM 3D Elevation Data** — Real terrain data for accurate elevation profiles
+- **Spatial Intelligence (Phase 2)** — PostGIS-backed storage for safety zones, construction zones, and route history
+- **Dynamic Safety Overlays** — Avoid unlit streets, crime zones, and construction in real-time
 
 ## 🏗️ Architecture
 
@@ -29,11 +31,15 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 │  :8000       │     │  :8000        │     │  :8080           │
 └─────────────┘     └──────┬───────┘     └──────────────────┘
                            │                    │
-                      ┌────┴─────┐         ┌────┴─────┐
-                      │ Nominatim│         │ NorCal   │
-                      │ Geocoding│         │ OSM Data │
-                      └──────────┘         │ + SRTM   │
-                                           └──────────┘
+                ┌──────────┴──────────┐    ┌────┴─────┐
+                │  PostGIS Database    │    │ NorCal   │
+                │  (via Docker)       │    │ OSM Data │
+                └──────────┬──────────┘    │ + SRTM   │
+                           │               └──────────┘
+                      ┌────┴─────┐
+                      │ Nominatim│
+                      │ Geocoding│
+                      └──────────┘
 ```
 
 ## 🚀 Quick Start
@@ -63,7 +69,16 @@ bash start_graphhopper.sh
 
 First run builds the routing graph (~3 min). Subsequent starts use the cache (~30 sec).
 
-### 3. Start the Backend
+### 3. Start the Spatial Database (Docker)
+
+Docker is used to provide a ready-to-use **PostGIS** environment. This extension for PostgreSQL adds support for geographic objects, allowing the backend to perform complex spatial queries (e.g., checking if a route segment intersects an unsafe zone).
+
+```bash
+cd backend
+docker compose up -d
+```
+
+### 4. Start the Backend
 
 ```bash
 cd backend
@@ -71,8 +86,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Create .env
-echo "GRAPHHOPPER_URL=http://localhost:8080" > .env
+# Run migrations to set up spatial tables
+export PYTHONPATH=.
+alembic upgrade head
 
 # Start server
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
