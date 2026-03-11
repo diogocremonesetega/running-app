@@ -855,9 +855,13 @@
       <div class="control-group" id="weatherWidget"
         style="display: none; padding: 10px; background: rgba(74, 144, 217, 0.08); border-radius: 8px; border: 1px solid var(--border); margin-top: 4px; margin-bottom: 8px;">
         <label style="margin-bottom: 4px;">Weather & Air Quality</label>
-        <div style="font-size: 13px; color: var(--text-primary); display: flex; justify-content: space-between;">
+        <div style="font-size: 13px; color: var(--text-primary); display: flex; justify-content: space-between; flex-wrap:wrap; gap:4px;">
           <span>🌡️ <span id="weatherTemp">—</span></span>
           <span>💨 AQI: <span id="weatherAqi">—</span></span>
+          <span>🌤️ Comfort: <span id="weatherComfort">—</span></span>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+          💨 Wind: <span id="weatherWind">—</span> &nbsp;|  🧭 Best bearing: <span id="weatherBearing">—</span>°
         </div>
         <div id="weatherWarning" style="color: var(--accent-orange); font-size: 11px; margin-top: 6px; display: none;">
         </div>
@@ -895,6 +899,10 @@
         <div class="stat">
           <span class="label">Elev. Range</span>
           <span class="value" id="statRange">—<span class="unit"> m</span></span>
+        </div>
+        <div class="stat" id="statScores" style="display:none; min-width:210px;">
+          <span class="label">Route Scores</span>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;" id="scoreBadges"></div>
         </div>
       </div>
 
@@ -1189,11 +1197,11 @@
       let distVal = parseFloat(document.getElementById('distanceInput').value);
       if (currentUnit === 'mi') distVal = distVal * MI_TO_KM;
 
+      const startLat = parseFloat(document.getElementById('startLat').value);
+      const startLng = parseFloat(document.getElementById('startLng').value);
+
       const body = {
-        start: {
-          lat: parseFloat(document.getElementById('startLat').value),
-          lng: parseFloat(document.getElementById('startLng').value),
-        },
+        start: { lat: startLat, lng: startLng },
         distance_km: distVal,
         elevation_preference: selectedProfile,
         avoid_traffic_signals: avoidSignals,
@@ -1204,19 +1212,28 @@
       };
 
       try {
-        const resp = await fetch(`${API_BASE}/api/v1/generate-route`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+        // Fetch route + weather advisory in parallel
+        const [routeResp, weatherResp] = await Promise.all([
+          fetch(`${API_BASE}/api/v1/generate-route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }),
+          fetch(`${API_BASE}/api/v1/weather-advisory?lat=${startLat}&lng=${startLng}`)
+        ]);
 
-        if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.detail || `HTTP ${resp.status}`);
+        if (!routeResp.ok) {
+          const err = await routeResp.json();
+          throw new Error(err.detail || `HTTP ${routeResp.status}`);
         }
 
-        const data = await resp.json();
+        const data = await routeResp.json();
         currentRouteData = data;
+
+        // Attach weather data to route data for updateStats()
+        if (weatherResp.ok) {
+          data.weather_advisory = await weatherResp.json();
+        }
 
         updateStats(data);
         drawRouteOnMap(data);
@@ -1360,36 +1377,59 @@
       document.getElementById('statTime').innerHTML = `${p.time_min ?? '—'}<span class="unit"> min</span>`;
       document.getElementById('statRange').innerHTML = `${range ?? '—'}<span class="unit"> ${elevUnit}</span>`;
 
-      // Update Weather Widget
-      if (data.environmental_conditions) {
-        const env = data.environmental_conditions;
+      // Update Weather Widget from weather_advisory (fetched in parallel)
+      const env = data.weather_advisory || data.environmental_conditions;
+      if (env) {
         document.getElementById('weatherWidget').style.display = 'block';
-        if (env.temperature_c !== null) {
+        // Temperature
+        if (env.temperature_c != null) {
           let temp = env.temperature_c;
           let tempUnit = '°C';
-          if (currentUnit === 'mi') {
-            temp = (temp * 9 / 5) + 32;
-            tempUnit = '°F';
-          }
+          if (currentUnit === 'mi') { temp = (temp * 9 / 5) + 32; tempUnit = '°F'; }
           document.getElementById('weatherTemp').textContent = `${Math.round(temp)}${tempUnit}`;
         } else {
           document.getElementById('weatherTemp').textContent = '—';
         }
-        if (env.us_aqi !== null) {
-          document.getElementById('weatherAqi').textContent = env.us_aqi;
-        } else {
-          document.getElementById('weatherAqi').textContent = '—';
-        }
+        // AQI
+        document.getElementById('weatherAqi').textContent = env.us_aqi ?? '—';
+        // Comfort score
+        const comfort = env.comfort_score;
+        const comfortLabel = env.comfort_label || '';
+        const comfortColor = comfort >= 80 ? '#34d399' : comfort >= 60 ? '#f59e0b' : comfort >= 40 ? '#f97316' : '#ef4444';
+        document.getElementById('weatherComfort').innerHTML = `<span style="color:${comfortColor};font-weight:700">${comfort ?? '—'}/100 ${comfortLabel}</span>`;
+        // Wind
+        const windDir = env.wind_direction_deg ?? '—';
+        const windSpd = env.wind_speed_kmh != null ? `${Math.round(env.wind_speed_kmh)} km/h` : '—';
+        document.getElementById('weatherWind').textContent = `${windSpd} from ${windDir}°`;
+        document.getElementById('weatherBearing').textContent = env.optimal_start_bearing != null ? Math.round(env.optimal_start_bearing) : '—';
+        // Warnings
         const warnEl = document.getElementById('weatherWarning');
-        if (env.aqi_warning && env.us_aqi !== null) {
-          warnEl.style.display = 'block';
-          warnEl.textContent = `⚠️ Poor Air Quality (AQI: ${env.us_aqi})`;
-        } else if (env.weather_warning) {
-          warnEl.style.display = 'block';
-          warnEl.textContent = '⚠️ Extreme Weather or Heavy Precipitation Detected';
-        } else {
-          warnEl.style.display = 'none';
-        }
+        const warns = [];
+        if (env.warnings?.air_quality || env.aqi_warning) warns.push(`⚠️ Poor Air Quality (AQI: ${env.us_aqi})`);
+        if (env.warnings?.weather || env.weather_warning) warns.push('⚠️ Extreme Weather or Heavy Precipitation');
+        if (warns.length) { warnEl.style.display = 'block'; warnEl.textContent = warns.join(' | '); }
+        else { warnEl.style.display = 'none'; }
+      }
+
+      // Route Score Badges
+      const props = data.route?.properties || {};
+      const scores = [];
+      if (props.safety_score != null) scores.push({ label: '🛡️ Safety', val: props.safety_score, max: 100 });
+      if (props.scenic_score != null) scores.push({ label: '🌿 Scenic', val: props.scenic_score, max: 100 });
+      // Derive a simple route quality score from comfort + ascent smoothness
+      if (env?.comfort_score != null) scores.push({ label: '☀️ Comfort', val: env.comfort_score, max: 100 });
+      const scoreBadgesEl = document.getElementById('scoreBadges');
+      const scoreStatEl = document.getElementById('statScores');
+      if (scores.length > 0) {
+        scoreStatEl.style.display = 'flex';
+        scoreBadgesEl.innerHTML = scores.map(s => {
+          const pct = Math.round(s.val);
+          const color = pct >= 75 ? '#34d399' : pct >= 50 ? '#f59e0b' : '#ef4444';
+          return `<span style="background:rgba(255,255,255,0.06);border:1px solid ${color}33;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;color:${color}">${s.label} ${pct}</span>`;
+        }).join('');
+      } else {
+        // Always show comfort score as a minimum
+        scoreStatEl.style.display = 'none';
       }
     }
 
@@ -1722,29 +1762,44 @@
         endCoord = { lat, lng };
       });
 
-      // Fetch safety data and draw heatmap / danger zones
+      // Fetch safety zones from PostGIS and draw heatmap
       try {
-        const resp = await fetch(`${API_BASE}/api/v1/safety-data`);
+        const { lat, lng } = startCoord;
+        const resp = await fetch(`${API_BASE}/api/v1/safety-overlay?lat=${lat}&lng=${lng}&radius_m=5000`);
         const data = await resp.json();
 
-        // Heatmap
-        if (data.incidents && L.heatLayer) {
-          const heatPoints = data.incidents.map(inc => [inc.lat, inc.lng, inc.weight || 0.5]);
-          heatmapOverlay = L.heatLayer(heatPoints, {
-            radius: 25,
-            blur: 15,
-            maxZoom: 15,
-            max: 1.0,
-            minOpacity: 0.3,
-            gradient: { 0.4: 'yellow', 0.65: 'orange', 1: 'red' }
+        // Convert GeoJSON polygon features → heatmap centroid points
+        if (data.features && data.features.length > 0 && L.heatLayer) {
+          const heatPoints = [];
+          data.features.forEach(f => {
+            if (f.properties.zone_type !== 'safety') return;
+            const score = f.properties.safety_score ?? 50;
+            // Low safety score = high danger weight
+            const weight = Math.max(0.1, (100 - score) / 100);
+            const geom = f.geometry;
+            // Use centroid of polygon ring
+            if (geom.type === 'Polygon' && geom.coordinates[0]) {
+              const ring = geom.coordinates[0];
+              const cLng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+              const cLat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+              heatPoints.push([cLat, cLng, weight]);
+            }
           });
-          if (showHeatmapOverlay) {
-            heatmapOverlay.addTo(map);
-          }
-          log(`Loaded safety data overlay.`, 'success');
+          heatmapOverlay = L.heatLayer(heatPoints, {
+            radius: 40,
+            blur: 25,
+            maxZoom: 16,
+            max: 1.0,
+            minOpacity: 0.25,
+            gradient: { 0.3: '#f59e0b', 0.6: '#f97316', 1.0: '#ef4444' }
+          });
+          if (showHeatmapOverlay) heatmapOverlay.addTo(map);
+          log(`Crime heatmap: ${heatPoints.length} zones loaded.`, 'success');
+        } else {
+          log('No safety zones found near start location.', 'info');
         }
       } catch (e) {
-        log('Failed to load safety data overlay', 'error');
+        log('Failed to load safety overlay', 'error');
         console.error(e);
       }
 
