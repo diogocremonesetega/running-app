@@ -2,7 +2,7 @@
 
 An elevation-aware running route generator for the Berkeley area, featuring real-time 3D terrain routing, interactive map visualization, and customizable elevation profiles.
 
-![Elevation Visualizer](https://img.shields.io/badge/Status-MVP-brightgreen) ![GraphHopper](https://img.shields.io/badge/Routing-GraphHopper%2010.0-blue) ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
+![Elevation Visualizer](https://img.shields.io/badge/Status-Phase_4_Complete-brightgreen) ![GraphHopper](https://img.shields.io/badge/Routing-GraphHopper%2010.0-blue) ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
 
 ## ✨ Features
 
@@ -19,16 +19,17 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 - **Compass Direction Selector** — Choose which direction your route heads (N/NE/E/SE/S/SW/W/NW)
 - **km/miles Toggle** — Switch between metric and imperial units (distance + elevation)
 - **SRTM 3D Elevation Data** — Real terrain data for accurate elevation profiles
-- **Spatial Intelligence (Phase 2)** — PostGIS-backed storage for safety zones, construction zones, and route history
-- **Dynamic Safety Overlays** — Avoid unlit streets, crime zones, and construction in real-time
+- **Spatial Intelligence (Phase 2 & 3)** — PostGIS-backed storage for safety zones, construction zones, and route history
+- **Dynamic Overlays** — Avoid unlit streets, crime zones, and construction in real-time. Visualize traffic signals and crime heatmaps.
+- **Scenic Routing & Weather (Phase 4)** — Prefers parks and trails. Integrates real-time weather, AQI, wind, and comfort scores. Suggests optimal wind-based start bearing. Calculates Safety and Scenic route scores.
 
 ## 🏗️ Architecture
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
 │  Browser UI  │────▶│  FastAPI      │────▶│  GraphHopper     │
 │  (Leaflet)   │◀────│  Backend      │◀────│  Routing Engine  │
-│  :8000       │     │  :8000        │     │  :8080           │
+│  :8000       │     │  :8000        │     │  :8989           │
 └─────────────┘     └──────┬───────┘     └──────────────────┘
                            │                    │
                 ┌──────────┴──────────┐    ┌────┴─────┐
@@ -46,53 +47,42 @@ An elevation-aware running route generator for the Berkeley area, featuring real
 
 ### Prerequisites
 
-- **Java 11+** (for GraphHopper)
+- **Java 11+** (for GraphHopper native execution)
 - **Python 3.10+** (for FastAPI backend)
+- **Docker** (for PostGIS database)
 
 ### 1. Download Data & GraphHopper
 
 ```bash
 cd graphhopper
 bash setup_graphhopper.sh
+cd ..
 ```
 
 This downloads:
 - GraphHopper 10.0 JAR (~50 MB)
 - NorCal OSM data (~600 MB)
 
-### 2. Start GraphHopper
-
-```bash
-cd graphhopper
-bash start_graphhopper.sh
-```
-
-First run builds the routing graph (~3 min). Subsequent starts use the cache (~30 sec).
-
-### 3. Start the Spatial Database (Docker)
-
-Docker is used to provide a ready-to-use **PostGIS** environment. This extension for PostgreSQL adds support for geographic objects, allowing the backend to perform complex spatial queries (e.g., checking if a route segment intersects an unsafe zone).
-
-```bash
-cd backend
-docker compose up -d
-```
-
-### 4. Start the Backend
+### 2. Setup Python Environment
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run migrations to set up spatial tables
-export PYTHONPATH=.
-alembic upgrade head
-
-# Start server
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd ..
 ```
+
+### 3. Start Everything (Unified Script)
+
+We use a unified startup script to launch PostGIS (via Docker), GraphHopper (natively via Java to avoid macOS VirtioFS performance issues), and the FastAPI backend.
+
+```bash
+# from the repository root
+./start.sh
+```
+
+Wait until you see `[OK] All services running!`
 
 ### 4. Open the Visualizer
 
