@@ -12,6 +12,14 @@ services:
       - "5432:5432"
     volumes:
       - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routegen -d routegen_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NOTE: GraphHopper runs natively via `./start.sh` (not in Docker)
+  # macOS VirtioFS cannot reliably mmap large PBF files inside containers.
 
 volumes:
   postgis_data:

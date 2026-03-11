@@ -60,10 +60,14 @@ def _feature_score(tags: dict) -> float:
 
 
 def _nodes_to_wkt(geometry: list[dict]) -> str | None:
-    """Convert a list of {lat, lon} node dicts to a WKT LINESTRING."""
+    """Convert a list of {lat, lon} node dicts to a 2D WKT LINESTRING.
+
+    Coordinate pairs must be comma-separated: LINESTRING(lng lat, lng lat, ...)
+    """
     if len(geometry) < 2:
         return None
-    coords = " ".join(f"{pt['lon']} {pt['lat']}" for pt in geometry)
+    # Each point is "lng lat" — pairs separated by commas
+    coords = ", ".join(f"{pt['lon']} {pt['lat']}" for pt in geometry)
     return f"LINESTRING({coords})"
 
 

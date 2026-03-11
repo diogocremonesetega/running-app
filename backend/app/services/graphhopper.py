@@ -22,10 +22,17 @@ class GraphHopperError(Exception):
 
 
 async def health_check() -> dict:
-    """Check if GraphHopper is running and healthy."""
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(f"{settings.graphhopper_url}/health")
-        return {"status": "ok" if resp.status_code == 200 else "error", "code": resp.status_code}
+    """Check if GraphHopper is running and healthy.
+
+    Returns a graceful 'unavailable' status instead of crashing if
+    GraphHopper has not yet started (e.g., still indexing the OSM graph).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{settings.graphhopper_url}/health")
+        return {"status": "ok" if resp.status_code == 200 else "degraded", "code": resp.status_code}
+    except Exception:
+        return {"status": "unavailable", "code": None, "note": "GraphHopper not reachable — may still be indexing"}
 
 
 async def get_route(
