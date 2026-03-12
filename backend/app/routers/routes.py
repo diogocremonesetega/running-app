@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Literal
-import httpx
+import uuid
+from typing import List, Literal, Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
+from geoalchemy2.shape import from_shape
+from shapely.geometry import LineString
+
+from app.db import get_db
+from app.models.spatial import RouteHistory
 from app.services import route_generator, graphhopper, spatial_queries, weather_data
 
 router = APIRouter(prefix="/api/v1", tags=["routes"])
@@ -327,3 +334,50 @@ async def weather_advisory(lat: float, lng: float):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Run History ---
+
+class RunSaveRequest(BaseModel):
+    """Payload sent from the frontend after a live run is completed."""
+    coordinates: List[List[float]] = Field(
+        ..., description="List of [lng, lat] pairs recorded during the run"
+    )
+    distance_m: float = Field(..., ge=0, description="Total distance in metres")
+    duration_s: int = Field(..., ge=0, description="Active run duration in seconds")
+    elevation_gain_m: float = Field(0.0, ge=0, description="Total elevation gain in metres")
+    profile_used: Optional[str] = Field(None, description="GraphHopper routing profile")
+    session_id: Optional[str] = Field(None, description="Optional anonymous session UUID")
+
+
+@router.post("/runs", status_code=201)
+async def save_run(payload: RunSaveRequest, db: AsyncSession = Depends(get_db)):
+    """Persist a completed live run to the route_history table.
+
+    Stores the GPS breadcrumb as a PostGIS LINESTRING alongside distance,
+    duration, elevation gain, and the routing profile that was used.
+    """
+    if len(payload.coordinates) < 2:
+        raise HTTPException(status_code=422, detail="A run must contain at least 2 GPS points.")
+
+    try:
+        user_uuid = uuid.UUID(payload.session_id) if payload.session_id else uuid.uuid4()
+    except ValueError:
+        user_uuid = uuid.uuid4()
+
+    # Build a Shapely LineString from [lng, lat] pairs (PostGIS expects lon/lat order)
+    line = LineString([(c[0], c[1]) for c in payload.coordinates])
+
+    run = RouteHistory(
+        user_id=user_uuid,
+        route_geom=from_shape(line, srid=4326),
+        distance_m=payload.distance_m,
+        duration_s=payload.duration_s,
+        elevation_gain_m=payload.elevation_gain_m,
+        profile_used=payload.profile_used,
+    )
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    return {"id": str(run.id)}

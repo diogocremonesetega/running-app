@@ -750,6 +750,387 @@
         max-height: 280px;
       }
     }
+
+    /* ===== Live Run Tracking ===== */
+    .run-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-run-start {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: linear-gradient(135deg, #34d399, #10b981);
+      color: #0f0f14;
+    }
+
+    .btn-run-start:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(52, 211, 153, 0.35);
+    }
+
+    .btn-run-start:disabled {
+      background: var(--border);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-run-pause {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid var(--accent-orange);
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--accent-orange);
+    }
+
+    .btn-run-pause:hover {
+      background: rgba(245, 158, 11, 0.2);
+    }
+
+    .btn-run-stop {
+      padding: 10px 14px;
+      border: 1px solid var(--accent-red);
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--accent-red);
+    }
+
+    .btn-run-stop:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Live Stats HUD */
+    .run-hud {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      z-index: 700;
+      background: rgba(15, 15, 20, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: none;
+      gap: 16px;
+      align-items: center;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+      min-width: 280px;
+    }
+
+    .run-hud.visible {
+      display: flex;
+    }
+
+    .hud-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .hud-stat .hud-label {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .hud-stat .hud-value {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .hud-stat .hud-unit {
+      font-size: 9px;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 32px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .hud-accuracy {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .hud-accuracy.yellow { background: var(--accent-orange); }
+    .hud-accuracy.red { background: var(--accent-red); }
+
+    /* Map run controls */
+    .run-map-controls {
+      position: absolute;
+      top: 12px;
+      right: 52px;
+      z-index: 700;
+      display: none;
+      gap: 6px;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .run-map-controls.visible {
+      display: flex;
+    }
+
+    .btn-auto-follow {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(15, 15, 20, 0.92);
+      color: var(--text-secondary);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s;
+    }
+
+    .btn-auto-follow.active {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      background: rgba(74, 144, 217, 0.12);
+    }
+
+    /* Pulsing live location dot */
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 0.8; }
+      100% { transform: scale(2.8); opacity: 0; }
+    }
+
+    .live-dot {
+      width: 14px;
+      height: 14px;
+      position: relative;
+    }
+
+    .live-dot-inner {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #4a90d9;
+      border: 2px solid white;
+      box-shadow: 0 0 8px rgba(74, 144, 217, 0.6);
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .live-dot-ring {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(74, 144, 217, 0.4);
+      position: absolute;
+      top: 0;
+      left: 0;
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
+
+    /* Toast notifications */
+    .toast-container {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .toast {
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: all;
+      backdrop-filter: blur(12px);
+      border: 1px solid;
+      white-space: nowrap;
+      animation: toast-in 0.3s ease;
+    }
+
+    .toast.warning {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: var(--accent-orange);
+    }
+
+    .toast.success {
+      background: rgba(52, 211, 153, 0.15);
+      border-color: rgba(52, 211, 153, 0.5);
+      color: var(--accent-green);
+    }
+
+    .toast.error {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: var(--accent-red);
+    }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Run Summary Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      display: none;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      width: 400px;
+      max-width: 92vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .summary-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .summary-stat {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .summary-stat .s-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 3px;
+    }
+
+    .summary-stat .s-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .summary-stat .s-unit {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .btn-save-run {
+      flex: 1;
+      padding: 11px;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: white;
+      transition: all 0.2s;
+    }
+
+    .btn-save-run:hover { opacity: 0.9; }
+    .btn-save-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-discard-run {
+      padding: 11px 18px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+
+    .btn-discard-run:hover {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    #summaryMap {
+      width: 100%;
+      height: 160px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
   </style>
 </head>
 
@@ -903,6 +1284,17 @@
       <button class="btn btn-secondary loop-controls" onclick="compareProfiles()">
         Compare All Profiles
       </button>
+
+      <!-- Live Run Tracking Controls -->
+      <div class="run-controls" id="runControls">
+        <button class="btn-run-start" id="btnStartRun" onclick="startRun()" disabled title="Generate a route first to enable tracking">
+          ▶ Start Run
+        </button>
+      </div>
+      <div class="run-controls hidden" id="runActiveControls">
+        <button class="btn-run-pause" id="btnPauseRun" onclick="togglePauseRun()">⏸ Pause</button>
+        <button class="btn-run-stop" id="btnStopRun" onclick="stopRun()">■ Stop</button>
+      </div>
     </div>
 
     <!-- Content -->
@@ -953,6 +1345,39 @@
             <span id="legendHigh">—</span>
           </div>
         </div>
+
+        <!-- Live Run HUD -->
+        <div class="run-hud" id="runHud">
+          <div class="hud-stat">
+            <span class="hud-label">Time</span>
+            <span class="hud-value" id="hudTime" style="color:var(--accent-purple)">0:00</span>
+          </div>
+          <div class="hud-divider"></div>
+          <div class="hud-stat">
+            <span class="hud-label">Distance</span>
+            <span class="hud-value" id="hudDist" style="color:var(--accent-green)">0.00</span>
+            <span class="hud-unit" id="hudDistUnit">km</span>
+          </div>
+          <div class="hud-divider"></div>
+          <div class="hud-stat">
+            <span class="hud-label">Pace</span>
+            <span class="hud-value" id="hudPace" style="color:var(--accent-orange)">—</span>
+            <span class="hud-unit" id="hudPaceUnit">/km</span>
+          </div>
+          <div class="hud-divider"></div>
+          <div class="hud-stat">
+            <span class="hud-label">GPS</span>
+            <div class="hud-accuracy" id="hudAccuracy"></div>
+          </div>
+        </div>
+
+        <!-- Auto-follow toggle -->
+        <div class="run-map-controls" id="runMapControls">
+          <button class="btn-auto-follow active" id="btnAutoFollow" onclick="toggleAutoFollow()">🎯 Follow</button>
+        </div>
+
+        <!-- Toast container -->
+        <div class="toast-container" id="toastContainer"></div>
       </div>
 
       <!-- Elevation chart -->
@@ -969,6 +1394,42 @@
 
       <!-- Log -->
       <div class="log-panel" id="logPanel"></div>
+    </div>
+  </div>
+
+  <!-- Run Summary Modal -->
+  <div class="modal-overlay" id="runSummaryModal">
+    <div class="modal-card">
+      <h2>🏁 Run Complete!</h2>
+      <div id="summaryMap"></div>
+      <div class="summary-stats">
+        <div class="summary-stat">
+          <div class="s-label">Distance</div>
+          <div>
+            <span class="s-value" id="summaryDist" style="color:var(--accent-green)">—</span><span class="s-unit" id="summaryDistUnit"> km</span>
+          </div>
+        </div>
+        <div class="summary-stat">
+          <div class="s-label">Time</div>
+          <div><span class="s-value" id="summaryTime" style="color:var(--accent-purple)">—</span></div>
+        </div>
+        <div class="summary-stat">
+          <div class="s-label">Avg Pace</div>
+          <div>
+            <span class="s-value" id="summaryPace" style="color:var(--accent-orange)">—</span><span class="s-unit" id="summaryPaceUnit"> /km</span>
+          </div>
+        </div>
+        <div class="summary-stat">
+          <div class="s-label">Elev. Gain</div>
+          <div>
+            <span class="s-value" id="summaryElev" style="color:var(--accent-red)">—</span><span class="s-unit"> m</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-save-run" id="btnSaveRun" onclick="saveRun()">💾 Save Run</button>
+        <button class="btn-discard-run" onclick="discardRun()">Discard</button>
+      </div>
     </div>
   </div>
 
@@ -1002,6 +1463,24 @@
     // Geocoded start/end coordinates
     let startCoord = { lat: 37.8719, lng: -122.2585 };
     let endCoord = { lat: null, lng: null };
+
+    // ===== Live Run Tracking State =====
+    let runState = 'idle'; // 'idle' | 'running' | 'paused'
+    let watchId = null;
+    let runPath = []; // [{lat, lng, ts, accuracy}]
+    let runStartTime = null;
+    let runPausedMs = 0;
+    let runPauseStart = null;
+    let runDistance = 0;
+    let liveMarker = null;
+    let accuracyCircle = null;
+    let breadcrumbLayer = null;
+    let autoFollow = true;
+    let wakeLock = null;
+    let timerInterval = null;
+    let offRouteCount = 0;
+    let recentPacePoints = []; // rolling 30s window for pace calc
+    let summaryMapInstance = null;
 
     // ========== Leaflet Map Init ==========
     // Center on UC Berkeley, dark tile layer
@@ -1297,6 +1776,8 @@
           data.weather_advisory = await weatherResp.json();
         }
 
+        document.getElementById('btnStartRun').disabled = false;
+
         updateStats(data);
         drawRouteOnMap(data);
         drawElevationChart(data);
@@ -1355,6 +1836,8 @@
 
         const data = await resp.json();
         currentRouteData = data;
+
+        document.getElementById('btnStartRun').disabled = false;
 
         updateStats(data);
         drawRouteOnMap(data);
@@ -1879,6 +2362,468 @@
         drawElevationChart(currentRouteData);
       }
     });
+
+    // ===== Live Run Tracking =====
+
+    function jsHaversine(a, b) {
+      const R = 6371000;
+      const phi1 = a.lat * Math.PI / 180;
+      const phi2 = b.lat * Math.PI / 180;
+      const dphi = (b.lat - a.lat) * Math.PI / 180;
+      const dlam = (b.lng - a.lng) * Math.PI / 180;
+      const x = Math.sin(dphi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlam / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    async function startRun() {
+      if (!navigator.geolocation) {
+        showToast('Geolocation not supported by your browser', 'error');
+        return;
+      }
+
+      runState = 'running';
+      runPath = [];
+      runDistance = 0;
+      runStartTime = Date.now();
+      runPausedMs = 0;
+      offRouteCount = 0;
+      recentPacePoints = [];
+
+      document.getElementById('runControls').classList.add('hidden');
+      document.getElementById('runActiveControls').classList.remove('hidden');
+      document.getElementById('runHud').classList.add('visible');
+      document.getElementById('runMapControls').classList.add('visible');
+
+      timerInterval = setInterval(updateTimer, 1000);
+
+      if (!breadcrumbLayer) {
+        breadcrumbLayer = L.layerGroup().addTo(map);
+      } else {
+        breadcrumbLayer.clearLayers();
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        onPositionUpdate,
+        onPositionError,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+
+      await acquireWakeLock();
+      log('Run started — GPS tracking active', 'success');
+      showToast('GPS tracking started', 'success');
+    }
+
+    function togglePauseRun() {
+      if (runState === 'running') {
+        runState = 'paused';
+        runPauseStart = Date.now();
+        clearInterval(timerInterval);
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        document.getElementById('btnPauseRun').textContent = '▶ Resume';
+        log('Run paused', 'info');
+        showToast('Run paused', 'warning');
+      } else if (runState === 'paused') {
+        runState = 'running';
+        runPausedMs += Date.now() - runPauseStart;
+        runPauseStart = null;
+        timerInterval = setInterval(updateTimer, 1000);
+        watchId = navigator.geolocation.watchPosition(
+          onPositionUpdate,
+          onPositionError,
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+        document.getElementById('btnPauseRun').textContent = '⏸ Pause';
+        log('Run resumed', 'success');
+        showToast('Run resumed', 'success');
+      }
+    }
+
+    function stopRun() {
+      if (runState === 'idle') return;
+
+      runState = 'idle';
+      clearInterval(timerInterval);
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      releaseWakeLock();
+
+      document.getElementById('runActiveControls').classList.add('hidden');
+      document.getElementById('runHud').classList.remove('visible');
+      document.getElementById('runMapControls').classList.remove('visible');
+      document.getElementById('btnPauseRun').textContent = '⏸ Pause';
+
+      showRunSummary();
+    }
+
+    // ===== GPS Position Handler =====
+
+    function onPositionUpdate(pos) {
+      if (runState !== 'running') return;
+
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      const point = { lat, lng, ts: Date.now(), accuracy };
+
+      // Filter: skip if accuracy too poor
+      if (accuracy > 30) {
+        document.getElementById('hudAccuracy').className = 'hud-accuracy yellow';
+        return;
+      }
+
+      // Filter: skip if displacement < 3m (eliminates GPS drift jitter)
+      if (runPath.length > 0) {
+        const d = jsHaversine(runPath[runPath.length - 1], point);
+        if (d < 3) {
+          document.getElementById('hudAccuracy').className = 'hud-accuracy';
+          return;
+        }
+        runDistance += d;
+        recentPacePoints.push({ ts: Date.now(), dist: runDistance });
+        const cutoff = Date.now() - 30000;
+        recentPacePoints = recentPacePoints.filter(p => p.ts > cutoff);
+      }
+
+      runPath.push(point);
+
+      const accClass = accuracy < 10 ? '' : accuracy < 20 ? ' yellow' : ' red';
+      document.getElementById('hudAccuracy').className = `hud-accuracy${accClass}`;
+
+      updateLiveMarker(lat, lng, accuracy);
+      updateBreadcrumb();
+      updateHudStats();
+      checkOffRoute(lat, lng);
+
+      if (autoFollow) map.setView([lat, lng]);
+    }
+
+    function onPositionError(err) {
+      const msgs = {
+        1: 'Location permission denied. Please allow location access.',
+        2: 'GPS signal unavailable. Move to an open area.',
+        3: 'GPS timeout — retrying...',
+      };
+      const msg = msgs[err.code] || 'GPS error';
+      showToast(msg, 'error');
+      log(`GPS: ${msg}`, 'error');
+      document.getElementById('hudAccuracy').className = 'hud-accuracy red';
+    }
+
+    // ===== Live Marker + Accuracy Circle =====
+
+    const pulsingDotIcon = L.divIcon({
+      className: '',
+      html: '<div class="live-dot"><div class="live-dot-ring"></div><div class="live-dot-inner"></div></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+
+    function updateLiveMarker(lat, lng, accuracy) {
+      const pos = [lat, lng];
+      if (!liveMarker) {
+        liveMarker = L.marker(pos, { icon: pulsingDotIcon, zIndexOffset: 1000 }).addTo(map);
+        accuracyCircle = L.circle(pos, {
+          radius: accuracy,
+          color: '#4a90d9',
+          fillColor: '#4a90d9',
+          fillOpacity: 0.08,
+          weight: 1,
+        }).addTo(map);
+      } else {
+        liveMarker.setLatLng(pos);
+        accuracyCircle.setLatLng(pos).setRadius(accuracy);
+      }
+    }
+
+    function updateBreadcrumb() {
+      if (!breadcrumbLayer || runPath.length < 2) return;
+      breadcrumbLayer.clearLayers();
+      const latLngs = runPath.map(p => [p.lat, p.lng]);
+      L.polyline(latLngs, {
+        color: '#4a90d9',
+        weight: 4,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(breadcrumbLayer);
+    }
+
+    // ===== Stats HUD =====
+
+    function updateTimer() {
+      const elapsed = Date.now() - runStartTime - runPausedMs;
+      document.getElementById('hudTime').textContent = formatDuration(elapsed);
+    }
+
+    function updateHudStats() {
+      const distM = runDistance;
+      let distDisplay, distUnitStr;
+      if (currentUnit === 'mi') {
+        distDisplay = (distM / 1000 * KM_TO_MI).toFixed(2);
+        distUnitStr = 'mi';
+      } else {
+        distDisplay = (distM / 1000).toFixed(2);
+        distUnitStr = 'km';
+      }
+      document.getElementById('hudDist').textContent = distDisplay;
+      document.getElementById('hudDistUnit').textContent = distUnitStr;
+
+      // Rolling 30s pace
+      let paceStr = '—';
+      if (recentPacePoints.length >= 2) {
+        const first = recentPacePoints[0];
+        const last = recentPacePoints[recentPacePoints.length - 1];
+        const dt = (last.ts - first.ts) / 1000;
+        const dd = last.dist - first.dist;
+        if (dd > 5 && dt > 0) {
+          const mPerS = dd / dt;
+          const secPerKm = 1000 / mPerS;
+          const secPerUnit = currentUnit === 'mi' ? secPerKm / KM_TO_MI : secPerKm;
+          paceStr = formatPace(secPerUnit);
+        }
+      }
+      document.getElementById('hudPace').textContent = paceStr;
+      document.getElementById('hudPaceUnit').textContent = currentUnit === 'mi' ? '/mi' : '/km';
+    }
+
+    function formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatPace(secPerUnit) {
+      const m = Math.floor(secPerUnit / 60);
+      const s = Math.round(secPerUnit % 60);
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    // ===== Auto-follow Toggle =====
+
+    function toggleAutoFollow() {
+      autoFollow = !autoFollow;
+      const btn = document.getElementById('btnAutoFollow');
+      btn.className = `btn-auto-follow${autoFollow ? ' active' : ''}`;
+    }
+
+    // ===== Off-Route Detection =====
+
+    function checkOffRoute(lat, lng) {
+      if (!currentRouteData) return;
+      const coords = currentRouteData.route?.geometry?.coordinates || [];
+      if (!coords.length) return;
+
+      let minDist = Infinity;
+      for (const c of coords) {
+        const d = jsHaversine({ lat, lng }, { lat: c[1], lng: c[0] });
+        if (d < minDist) minDist = d;
+      }
+
+      if (minDist > 75) {
+        offRouteCount++;
+        if (offRouteCount === 3) {
+          showToast('⚠️ You appear to be off route', 'warning');
+          log('Off-route detected (>75m from planned path)', 'error');
+        }
+      } else {
+        if (offRouteCount >= 3) {
+          showToast('✓ Back on route', 'success');
+        }
+        offRouteCount = 0;
+      }
+    }
+
+    // ===== Wake Lock =====
+
+    async function acquireWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) { /* silently ignored on unsupported browsers */ }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && runState === 'running' && !wakeLock) {
+        await acquireWakeLock();
+      }
+    });
+
+    // ===== Toast Notifications =====
+
+    function showToast(msg, type = 'info', durationMs = 4000) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+      }, durationMs);
+    }
+
+    // ===== Run Summary Modal =====
+
+    function showRunSummary() {
+      // Remove live map layers
+      if (liveMarker) { map.removeLayer(liveMarker); liveMarker = null; }
+      if (accuracyCircle) { map.removeLayer(accuracyCircle); accuracyCircle = null; }
+
+      const totalMs = (runPauseStart ? runPauseStart : Date.now()) - runStartTime - runPausedMs;
+      const distM = runDistance;
+      const elevGain = computeElevationGain();
+
+      const unit = currentUnit;
+      let distDisplay, distUnitStr, paceUnitStr;
+      if (unit === 'mi') {
+        distDisplay = (distM / 1000 * KM_TO_MI).toFixed(2);
+        distUnitStr = ' mi';
+        paceUnitStr = '/mi';
+      } else {
+        distDisplay = (distM / 1000).toFixed(2);
+        distUnitStr = ' km';
+        paceUnitStr = '/km';
+      }
+
+      let avgPace = '—';
+      if (distM > 50) {
+        const totalSec = totalMs / 1000;
+        const secPerKm = totalSec / (distM / 1000);
+        const secPerUnit = unit === 'mi' ? secPerKm / KM_TO_MI : secPerKm;
+        avgPace = formatPace(secPerUnit);
+      }
+
+      document.getElementById('summaryDist').textContent = distDisplay;
+      document.getElementById('summaryDistUnit').textContent = distUnitStr;
+      document.getElementById('summaryTime').textContent = formatDuration(totalMs);
+      document.getElementById('summaryPace').textContent = avgPace;
+      document.getElementById('summaryPaceUnit').textContent = paceUnitStr;
+      document.getElementById('summaryElev').textContent = elevGain > 0 ? `+${Math.round(elevGain)}` : '—';
+
+      // Build mini map of the actual path taken
+      setTimeout(() => {
+        const mapEl = document.getElementById('summaryMap');
+        if (summaryMapInstance) {
+          summaryMapInstance.remove();
+          summaryMapInstance = null;
+        }
+        summaryMapInstance = L.map(mapEl, {
+          zoomControl: false,
+          dragging: false,
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+          attributionControl: false,
+        });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          subdomains: 'abcd',
+          maxZoom: 19,
+        }).addTo(summaryMapInstance);
+        if (runPath.length > 1) {
+          const latLngs = runPath.map(p => [p.lat, p.lng]);
+          const poly = L.polyline(latLngs, { color: '#4a90d9', weight: 4, opacity: 0.9 });
+          poly.addTo(summaryMapInstance);
+          summaryMapInstance.fitBounds(poly.getBounds(), { padding: [16, 16] });
+        } else {
+          summaryMapInstance.setView([startCoord.lat, startCoord.lng], 14);
+        }
+      }, 100);
+
+      document.getElementById('runSummaryModal').classList.add('visible');
+      document.getElementById('btnSaveRun').disabled = false;
+      document.getElementById('btnSaveRun').textContent = '💾 Save Run';
+    }
+
+    function computeElevationGain() {
+      if (!currentRouteData || runPath.length < 2) return 0;
+      const profile = currentRouteData.elevation_profile || [];
+      if (!profile.length) return 0;
+
+      let gain = 0;
+      for (let i = 1; i < runPath.length; i++) {
+        const p = runPath[i];
+        const prev = runPath[i - 1];
+
+        let nearestElev = profile[0].elevation_m;
+        let minDist = Infinity;
+        for (const pp of profile) {
+          const d = jsHaversine({ lat: p.lat, lng: p.lng }, { lat: pp.lat, lng: pp.lng });
+          if (d < minDist) { minDist = d; nearestElev = pp.elevation_m; }
+        }
+
+        let prevNearestElev = profile[0].elevation_m;
+        let prevMinDist = Infinity;
+        for (const pp of profile) {
+          const d = jsHaversine({ lat: prev.lat, lng: prev.lng }, { lat: pp.lat, lng: pp.lng });
+          if (d < prevMinDist) { prevMinDist = d; prevNearestElev = pp.elevation_m; }
+        }
+
+        const diff = nearestElev - prevNearestElev;
+        if (diff > 0) gain += diff;
+      }
+      return gain;
+    }
+
+    async function saveRun() {
+      const btn = document.getElementById('btnSaveRun');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      const totalMs = (runPauseStart ? runPauseStart : Date.now()) - runStartTime - runPausedMs;
+      const elevGain = computeElevationGain();
+
+      const payload = {
+        coordinates: runPath.map(p => [p.lng, p.lat]),
+        distance_m: Math.round(runDistance),
+        duration_s: Math.round(totalMs / 1000),
+        elevation_gain_m: Math.round(elevGain),
+        profile_used: currentRouteData?.route?.properties?.profile_used || 'unknown',
+      };
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        log(`Run saved (id: ${data.id})`, 'success');
+        btn.textContent = '✓ Saved!';
+        setTimeout(() => discardRun(), 1500);
+      } catch (e) {
+        log(`Failed to save run: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = '💾 Save Run';
+        showToast('Failed to save run', 'error');
+      }
+    }
+
+    function discardRun() {
+      document.getElementById('runSummaryModal').classList.remove('visible');
+      if (breadcrumbLayer) breadcrumbLayer.clearLayers();
+      document.getElementById('runControls').classList.remove('hidden');
+      // Reset run state
+      runPath = [];
+      runDistance = 0;
+      runStartTime = null;
+      runPausedMs = 0;
+      runPauseStart = null;
+      offRouteCount = 0;
+      recentPacePoints = [];
+    }
   </script>
 </body>
 
