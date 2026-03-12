@@ -3,7 +3,7 @@
 # Usage: ./start.sh [--no-backend]
 #
 # Services:
-#   1. PostGIS (Docker)      — port 5432
+#   1. PostGIS (Docker)      — port 5433
 #   2. GraphHopper (native)  — port 8989 (first run ~5-10 min to index NorCal OSM)
 #   3. FastAPI backend        — port 8000
 

@@ -220,6 +220,32 @@
       font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
+    .btn-current-location {
+      margin-top: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      text-align: center;
+    }
+
+    .btn-current-location:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .btn-current-location:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
     /* --- Route mode toggle --- */
     .mode-toggle {
       display: flex;
@@ -757,6 +783,9 @@
           <span class="search-icon">🔍</span>
           <div class="search-dropdown" id="startDropdown"></div>
         </div>
+        <button type="button" class="btn-current-location" id="btnCurrentLocation" onclick="useCurrentLocation()">
+          📍 Current Location
+        </button>
         <div class="coord-display" id="startCoords">37.8719, -122.2585</div>
         <input type="hidden" id="startLat" value="37.8719">
         <input type="hidden" id="startLng" value="-122.2585">
@@ -1099,7 +1128,7 @@
       input.addEventListener('input', () => {
         clearTimeout(searchTimeout);
         const q = input.value.trim();
-        if (q.length < 3) {
+        if (q.length < 3 || q === 'Current Location') {
           dropdown.classList.remove('visible');
           return;
         }
@@ -1116,6 +1145,39 @@
           dropdown.classList.remove('visible');
         }
       });
+    }
+
+    async function useCurrentLocation() {
+      const btn = document.getElementById('btnCurrentLocation');
+      const input = document.getElementById('startSearch');
+      if (!navigator.geolocation) {
+        log('Geolocation is not supported by your browser', 'error');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Locating...';
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          document.getElementById('startLat').value = lat;
+          document.getElementById('startLng').value = lng;
+          document.getElementById('startCoords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          input.value = 'Current Location';
+          startCoord = { lat, lng };
+          map.setView([lat, lng], 15);
+          log('Start location set to current position', 'success');
+          btn.disabled = false;
+          btn.textContent = '📍 Current Location';
+        },
+        (err) => {
+          btn.disabled = false;
+          btn.textContent = '📍 Current Location';
+          const msg = err.code === 1 ? 'Location permission denied' : err.code === 2 ? 'Location unavailable' : 'Location request timed out';
+          log(msg, 'error');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
     }
 
     async function geocodeSearch(query, dropdown, coordDisplayId, latInputId, lngInputId, onSelect) {
