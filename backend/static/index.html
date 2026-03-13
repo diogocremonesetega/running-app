@@ -2388,6 +2388,7 @@
       runPausedMs = 0;
       offRouteCount = 0;
       recentPacePoints = [];
+      rawPositionBuffer = [];
 
       document.getElementById('runControls').classList.add('hidden');
       document.getElementById('runActiveControls').classList.remove('hidden');
@@ -2427,6 +2428,7 @@
         runState = 'running';
         runPausedMs += Date.now() - runPauseStart;
         runPauseStart = null;
+        rawPositionBuffer = []; // clear stale positions before resuming
         timerInterval = setInterval(updateTimer, 1000);
         watchId = navigator.geolocation.watchPosition(
           onPositionUpdate,
@@ -2460,25 +2462,44 @@
 
     // ===== GPS Position Handler =====
 
+    // Rolling buffer of last 3 raw readings for smoothing
+    let rawPositionBuffer = [];
+
+    function smoothedPosition(rawLat, rawLng) {
+      rawPositionBuffer.push({ lat: rawLat, lng: rawLng });
+      if (rawPositionBuffer.length > 3) rawPositionBuffer.shift();
+      const n = rawPositionBuffer.length;
+      return {
+        lat: rawPositionBuffer.reduce((s, p) => s + p.lat, 0) / n,
+        lng: rawPositionBuffer.reduce((s, p) => s + p.lng, 0) / n,
+      };
+    }
+
     function onPositionUpdate(pos) {
       if (runState !== 'running') return;
 
-      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      const { latitude: rawLat, longitude: rawLng, accuracy, speed } = pos.coords;
+
+      // Update accuracy indicator regardless of filtering
+      const accClass = accuracy < 10 ? '' : accuracy < 25 ? ' yellow' : ' red';
+      document.getElementById('hudAccuracy').className = `hud-accuracy${accClass}`;
+
+      // Widen accuracy gate — 50m still gives usable positions on streets
+      if (accuracy > 50) return;
+
+      // Apply 3-point exponential smoother to reduce jitter
+      const { lat, lng } = smoothedPosition(rawLat, rawLng);
       const point = { lat, lng, ts: Date.now(), accuracy };
 
-      // Filter: skip if accuracy too poor
-      if (accuracy > 30) {
-        document.getElementById('hudAccuracy').className = 'hud-accuracy yellow';
-        return;
-      }
+      // Adaptive displacement threshold:
+      //   - Device reports actual movement (speed > 0)  → accept ≥ 1 m
+      //   - Speed unknown or zero (possible drift)      → require ≥ 2 m
+      const isMoving = speed != null && speed > 0.3; // 0.3 m/s ≈ barely a shuffle
+      const minDisplacement = isMoving ? 1 : 2;
 
-      // Filter: skip if displacement < 3m (eliminates GPS drift jitter)
       if (runPath.length > 0) {
         const d = jsHaversine(runPath[runPath.length - 1], point);
-        if (d < 3) {
-          document.getElementById('hudAccuracy').className = 'hud-accuracy';
-          return;
-        }
+        if (d < minDisplacement) return;
         runDistance += d;
         recentPacePoints.push({ ts: Date.now(), dist: runDistance });
         const cutoff = Date.now() - 30000;
@@ -2486,9 +2507,6 @@
       }
 
       runPath.push(point);
-
-      const accClass = accuracy < 10 ? '' : accuracy < 20 ? ' yellow' : ' red';
-      document.getElementById('hudAccuracy').className = `hud-accuracy${accClass}`;
 
       updateLiveMarker(lat, lng, accuracy);
       updateBreadcrumb();
