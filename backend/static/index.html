@@ -740,6 +740,40 @@
       border-right: 1px solid var(--border);
     }
 
+    /* --- Distance presets --- */
+    .distance-presets {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .preset-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .preset-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-secondary);
+      border-color: var(--accent-blue);
+    }
+
+    .preset-btn.selected {
+      border-color: var(--accent-blue);
+      background: rgba(74, 144, 217, 0.12);
+      color: var(--accent-blue);
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .main {
@@ -1188,6 +1222,12 @@
       <!-- Distance + Units (Loop only) -->
       <div class="control-group loop-controls" id="distanceGroup">
         <label id="distanceLabel">Target Distance (km)</label>
+        <div class="distance-presets">
+          <button type="button" class="preset-btn" data-km="5" data-mi="3.1" onclick="selectDistancePreset(this)">5K</button>
+          <button type="button" class="preset-btn" data-km="10" data-mi="6.2" onclick="selectDistancePreset(this)">10K</button>
+          <button type="button" class="preset-btn" data-km="21.1" data-mi="13.1" onclick="selectDistancePreset(this)">Half</button>
+          <button type="button" class="preset-btn" data-km="42.2" data-mi="26.2" onclick="selectDistancePreset(this)">Marathon</button>
+        </div>
         <input type="number" id="distanceInput" value="5.0" min="0.5" max="50" step="0.5">
         <div class="unit-toggle">
           <button class="unit-btn selected" data-unit="km" onclick="selectUnit('km')">km</button>
@@ -1247,6 +1287,10 @@
         <div class="toggle-group" style="margin-top: 8px;">
           <label>Avoid Unlit Streets (Night Run)</label>
           <div class="toggle" id="toggleUnlit" onclick="toggleSwitch(this, 'unlit')"></div>
+        </div>
+        <div class="toggle-group" style="margin-top: 8px;">
+          <label>Prefer Scenic Routes (Parks & Trails)</label>
+          <div class="toggle" id="toggleScenic" onclick="toggleSwitch(this, 'scenic')"></div>
         </div>
       </div>
 
@@ -1446,6 +1490,7 @@
     let avoidSignals = false;
     let prioritizeSafety = false;
     let avoidUnlitStreets = false;
+    let preferScenic = false;
     let currentRouteData = null;
     let routeLayerGroup = null;
     let signalLayerGroup = null;
@@ -1532,6 +1577,7 @@
       if (type === 'signals') avoidSignals = el.classList.contains('active');
       if (type === 'safety') prioritizeSafety = el.classList.contains('active');
       if (type === 'unlit') avoidUnlitStreets = el.classList.contains('active');
+      if (type === 'scenic') preferScenic = el.classList.contains('active');
     }
 
     function toggleOverlay(el, type) {
@@ -1577,8 +1623,30 @@
       }
       currentUnit = unit;
 
+      // Update preset button selection to match current value
+      updatePresetSelection();
+
       // Re-render stats if we have data
       if (currentRouteData) updateStats(currentRouteData);
+    }
+
+    function selectDistancePreset(el) {
+      const km = parseFloat(el.dataset.km);
+      const mi = parseFloat(el.dataset.mi);
+      const input = document.getElementById('distanceInput');
+      input.value = currentUnit === 'km' ? km.toFixed(1) : mi.toFixed(1);
+
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+      el.classList.add('selected');
+    }
+
+    function updatePresetSelection() {
+      const input = document.getElementById('distanceInput');
+      const val = parseFloat(input.value);
+      document.querySelectorAll('.preset-btn').forEach(b => {
+        const targetVal = currentUnit === 'km' ? parseFloat(b.dataset.km) : parseFloat(b.dataset.mi);
+        b.classList.toggle('selected', Math.abs(val - targetVal) < 0.1);
+      });
     }
 
     // ========== Route mode toggle ==========
@@ -1748,6 +1816,7 @@
         avoid_traffic_signals: avoidSignals,
         prioritize_safety: prioritizeSafety,
         avoid_unlit_streets: avoidUnlitStreets,
+        prefer_scenic: preferScenic,
         num_waypoints: parseInt(document.getElementById('numWaypoints').value),
         start_bearing: selectedBearing,
       };
@@ -1871,6 +1940,7 @@
           elevation_preference: prof,
           avoid_traffic_signals: avoidSignals,
           prioritize_safety: prioritizeSafety,
+          prefer_scenic: preferScenic,
           num_waypoints: parseInt(document.getElementById('numWaypoints').value),
           start_bearing: selectedBearing,
         };
@@ -2301,6 +2371,12 @@
     window.addEventListener('load', async () => {
       log('Elevation Visualizer ready');
       checkConnection();
+
+      // Initial distance preset selection (5K = 5.0 km default)
+      updatePresetSelection();
+
+      // Update preset selection when user manually changes distance
+      document.getElementById('distanceInput').addEventListener('input', updatePresetSelection);
 
       // Set up address search for start and end locations
       setupSearch('startSearch', 'startDropdown', 'startCoords', 'startLat', 'startLng', (lat, lng) => {

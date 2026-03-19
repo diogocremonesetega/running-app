@@ -6,10 +6,51 @@ starting point, then routing through them via GraphHopper.
 
 from __future__ import annotations
 
+import json
 import math
+import re
 from typing import Any
 
+from shapely.geometry import shape, mapping
+
 from app.services import graphhopper
+
+# GraphHopper compiles one Java statement per area; hundreds of areas (e.g. unlit OSM ways)
+# produces a Janino subclass that fails to compile. Keep total dynamic areas small.
+MAX_CUSTOM_MODEL_AREAS = 45
+MAX_UNLIT_AREAS = 22
+
+
+def _java_safe_area_id(raw: str) -> str:
+    """Area ids become Java identifiers like `feature_<id>`; only [a-zA-Z0-9_] allowed."""
+    s = re.sub(r"[^a-zA-Z0-9_]", "_", raw)
+    if not s or s[0].isdigit():
+        s = "a_" + s
+    return s
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    h = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlng / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _to_polygon_geometry(geojson_geom: dict) -> dict | None:
+    """Convert GeoJSON geometry to a single Polygon for GraphHopper.
+
+    GraphHopper only supports Polygon. MultiPolygon uses the largest part.
+    """
+    geom = shape(geojson_geom)
+    if geom.geom_type == "Polygon":
+        return mapping(geom)
+    if geom.geom_type == "MultiPolygon":
+        # Use largest polygon by area
+        largest = max(geom.geoms, key=lambda g: g.area)
+        return mapping(largest)
+    return None
 
 
 # --- Geometry helpers ---
@@ -159,95 +200,96 @@ async def generate_loop_route(
     profile = _select_profile(elevation_preference, avoid_traffic_signals)
 
     # 4. Call GraphHopper
-    custom_model: dict[str, Any] | None = None
+    # GraphHopper v10: areas = FeatureCollection; each feature needs "id".
+    # Too many areas → Janino-generated init() blows up and fails to compile.
+    area_pairs: list[tuple[dict[str, Any], dict[str, str]]] = []
+    used_ids: set[str] = set()
+
+    def _add_area(suggested_id: str, geometry: dict, multiply_by: str) -> None:
+        aid = _java_safe_area_id(suggested_id)
+        base = aid
+        n = 0
+        while aid in used_ids:
+            n += 1
+            aid = f"{base}_{n}"
+        used_ids.add(aid)
+        feat = {"type": "Feature", "id": aid, "geometry": geometry}
+        area_pairs.append((feat, {"if": f"in_{aid}", "multiply_by": multiply_by}))
+
+    # --- Closure zones (PostGIS) — block routing through closures ---
+    from app.services import spatial_queries as _sq
+    closure_zones = await _sq.get_active_closures(start_lat, start_lng, radius_m=5000)
+    for i, z in enumerate(closure_zones):
+        geojson = json.loads(z["geojson"])
+        poly = _to_polygon_geometry(geojson)
+        if poly:
+            _add_area(f"closure_{i}", poly, "0")
 
     # --- Safety zones (PostGIS) ---
     if prioritize_safety:
         from app.services import spatial_queries
         safety_zones = await spatial_queries.get_active_safety_zones(start_lat, start_lng, radius_m=5000)
-        if safety_zones:
-            areas = {}
-            priority_rules = []
-            for z in safety_zones:
-                import json as _json
-                geojson = _json.loads(z["geojson"])
-                area_id = z["id"]
-                areas[area_id] = {"type": "Feature", "geometry": geojson}
-                # Heavier penalty for lower SQI scores
-                penalty = round(max(0.1, z["safety_score"] / 100), 2)
-                priority_rules.append({"if": f"in_{area_id}", "multiply_by": str(penalty)})
-            custom_model = {"areas": areas, "priority": priority_rules}
+        for i, z in enumerate(safety_zones):
+            geojson = json.loads(z["geojson"])
+            poly = _to_polygon_geometry(geojson)
+            if poly:
+                penalty = str(round(max(0.1, z["safety_score"] / 100), 2))
+                _add_area(f"safety_{i}", poly, penalty)
 
-    # --- Closure zones (PostGIS) — always merged when available ---
-    from app.services import spatial_queries as _sq
-    closure_zones = await _sq.get_active_closures(start_lat, start_lng, radius_m=5000)
-    if closure_zones:
-        if custom_model is None:
-            custom_model = {"areas": {}, "priority": []}
-        import json as _json
-        for z in closure_zones:
-            geojson = _json.loads(z["geojson"])
-            area_id = z["id"]
-            custom_model["areas"][area_id] = {"type": "Feature", "geometry": geojson}
-            custom_model["priority"].append({"if": f"in_{area_id}", "multiply_by": "0"})
-
-    # --- Scenic segments (PostGIS) --- boost priority on parks/trails
+    # --- Scenic + unlit (only when prefer_scenic) ---
     if prefer_scenic:
         from app.services import spatial_queries as _sq2
-        scenic_segs = await _sq2.get_scenic_segments_near(start_lat, start_lng, radius_m=4000)
-        if scenic_segs:
-            if custom_model is None:
-                custom_model = {"areas": {}, "priority": []}
-            import json as _json2
-            for s in scenic_segs:
-                import json as _json3
-                geojson = _json3.loads(s["geojson"])
-                # Buffer linestring to polygon for GraphHopper areas
-                from shapely.geometry import shape, mapping
-                geom = shape(geojson)
-                buffered = geom.buffer(0.0001)  # ~11m buffer
-                area_id = s["id"]
-                custom_model["areas"][area_id] = {
-                    "type": "Feature",
-                    "geometry": mapping(buffered),
-                }
-                boost = round(1.0 + (s["gvi_score"] * 2), 1)  # 1.7 – 3.0
-                custom_model["priority"].append({"if": f"in_{area_id}", "multiply_by": str(boost)})
-
         from app.services import lighting_data
-        
-        # calculate bounding box of all waypoints to query OSM
+
+        scenic_segs = await _sq2.get_scenic_segments_near(start_lat, start_lng, radius_m=4000)
+        for i, s in enumerate(scenic_segs):
+            geojson = json.loads(s["geojson"])
+            geom = shape(geojson)
+            buffered = geom.buffer(0.0001)
+            poly = _to_polygon_geometry(mapping(buffered))
+            if poly:
+                boost = str(round(1.0 + (s["gvi_score"] * 2), 1))
+                _add_area(f"scenic_{i}", poly, boost)
+
         lats = [wp[0] for wp in all_waypoints]
         lngs = [wp[1] for wp in all_waypoints]
         min_lat, max_lat = min(lats) - 0.005, max(lats) + 0.005
         min_lng, max_lng = min(lngs) - 0.005, max(lngs) + 0.005
         bbox = f"{min_lat},{min_lng},{max_lat},{max_lng}"
-        
         unlit_zones = await lighting_data.fetch_unlit_streets(bbox)
-        
-        if unlit_zones:
-            if custom_model is None:
-                custom_model = {"areas": {}, "priority": []}
-                
-            for i, z in enumerate(unlit_zones):
-                area_id = f"unlit_zone_{i}"
-                custom_model["areas"][area_id] = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [z["min_lng"], z["min_lat"]],
-                            [z["max_lng"], z["min_lat"]],
-                            [z["max_lng"], z["max_lat"]],
-                            [z["min_lng"], z["max_lat"]],
-                            [z["min_lng"], z["min_lat"]],
-                        ]]
-                    }
-                }
-                custom_model["priority"].append({
-                    "if": f"in_{area_id}",
-                    "multiply_by": "0.2"
-                })
+
+        def _unlit_sort_key(z: dict[str, float]) -> float:
+            clat = (z["min_lat"] + z["max_lat"]) / 2
+            clng = (z["min_lng"] + z["max_lng"]) / 2
+            return _haversine_km(start_lat, start_lng, clat, clng)
+
+        unlit_zones = sorted(unlit_zones, key=_unlit_sort_key)[:MAX_UNLIT_AREAS]
+
+        for i, z in enumerate(unlit_zones):
+            poly = {
+                "type": "Polygon",
+                "coordinates": [[
+                    [z["min_lng"], z["min_lat"]],
+                    [z["max_lng"], z["min_lat"]],
+                    [z["max_lng"], z["max_lat"]],
+                    [z["min_lng"], z["max_lat"]],
+                    [z["min_lng"], z["min_lat"]],
+                ]],
+            }
+            _add_area(f"unlit_{i}", poly, "0.2")
+
+    # Cap total areas (closures + safety + scenic + unlit)
+    if len(area_pairs) > MAX_CUSTOM_MODEL_AREAS:
+        area_pairs = area_pairs[:MAX_CUSTOM_MODEL_AREAS]
+
+    custom_model: dict[str, Any] | None = None
+    if area_pairs:
+        features = [p[0] for p in area_pairs]
+        priority_rules = [p[1] for p in area_pairs]
+        custom_model = {
+            "areas": {"type": "FeatureCollection", "features": features},
+            "priority": priority_rules,
+        }
 
     if custom_model:
         gh_response = await graphhopper.post_route_with_custom_model(
