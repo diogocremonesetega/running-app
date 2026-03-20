@@ -26,5 +26,5 @@ COPY . .
 EXPOSE 8000
 
 # Command to run the application using uvicorn
-# We use 0.0.0.0 to bind to all interfaces for Render
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# We run `alembic upgrade head` first to ensure the PostGIS tables exist
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
