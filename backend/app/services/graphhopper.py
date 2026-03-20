@@ -77,6 +77,9 @@ async def get_route(
         params.append(("algorithm", "alternative_route"))
         params.append(("alternative_route.max_paths", str(alternative_routes)))
 
+    if settings.graphhopper_api_key:
+        params.append(("key", settings.graphhopper_api_key))
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(f"{settings.graphhopper_url}/route", params=params)
 
@@ -126,10 +129,15 @@ async def post_route_with_custom_model(
     if custom_model:
         body["custom_model"] = custom_model
 
+    params = {}
+    if settings.graphhopper_api_key:
+        params["key"] = settings.graphhopper_api_key
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{settings.graphhopper_url}/route",
             json=body,
+            params=params,
         )
 
     if resp.status_code != 200:

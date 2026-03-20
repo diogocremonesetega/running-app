@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     """Application settings, read from .env or environment."""
 
     graphhopper_url: str = "http://localhost:8989"
+    graphhopper_api_key: str = ""
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     debug: bool = True
