@@ -2,7 +2,7 @@ services:
   - type: web
     name: pathwise-backend
     runtime: docker
-    plan: starter # Starter plan required for background workers and Postgres
+    plan: free # Starter plan required for background workers and Postgres
     region: oregon
     envVars:
       - key: DATABASE_URL
@@ -18,6 +18,6 @@ services:
 
 databases:
   - name: pathwise-db
-    plan: starter
+    plan: free
     region: oregon
     postgresMajorVersion: 15
