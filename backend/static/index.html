@@ -774,6 +774,64 @@
       color: var(--accent-blue);
     }
 
+    /* --- Smart Training Mode --- */
+    .training-mode-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .training-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .training-card {
+      padding: 9px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .training-card:hover {
+      border-color: var(--accent-blue);
+      background: var(--bg-card-hover);
+    }
+
+    .training-card.selected {
+      border-color: var(--accent-blue);
+      background: rgba(74, 144, 217, 0.12);
+    }
+
+    .training-card.selected.easy   { border-color: var(--accent-green);  background: rgba(52, 211, 153, 0.10); }
+    .training-card.selected.base   { border-color: var(--accent-blue);   background: rgba(74, 144, 217, 0.12); }
+    .training-card.selected.tempo  { border-color: var(--accent-orange); background: rgba(245, 158, 11, 0.11); }
+    .training-card.selected.hills  { border-color: var(--accent-red);    background: rgba(239, 68, 68, 0.10); }
+
+    .training-card .tc-icon  { font-size: 17px; line-height: 1; }
+    .training-card .tc-name  { font-size: 11px; font-weight: 600; color: var(--text-primary); margin-top: 3px; }
+    .training-card .tc-hint  { font-size: 9px;  color: var(--text-muted); margin-top: 1px; line-height: 1.3; }
+
+    .training-advisory {
+      margin-top: 7px;
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 11px;
+      line-height: 1.45;
+      display: none;
+    }
+
+    .training-advisory.good    { background: rgba(52, 211, 153, 0.10); color: var(--accent-green); border: 1px solid rgba(52, 211, 153, 0.25); }
+    .training-advisory.caution { background: rgba(245, 158, 11, 0.10); color: var(--accent-orange); border: 1px solid rgba(245, 158, 11, 0.25); }
+    .training-advisory.warning { background: rgba(239, 68, 68, 0.10);  color: var(--accent-red);    border: 1px solid rgba(239, 68, 68, 0.25); }
+
     /* Responsive */
     @media (max-width: 768px) {
       .main {
@@ -1306,6 +1364,34 @@
         </div>
       </div>
 
+      <!-- Smart Training Mode -->
+      <div class="control-group loop-controls" id="trainingModeGroup">
+        <label class="training-mode-label">⚡ Smart Training Mode</label>
+        <div class="training-grid">
+          <div class="training-card easy" onclick="selectTrainingMode(this, 'easy')">
+            <div class="tc-icon">🌊</div>
+            <div class="tc-name">Easy</div>
+            <div class="tc-hint">Flat · Scenic · Recovery</div>
+          </div>
+          <div class="training-card base" onclick="selectTrainingMode(this, 'base')">
+            <div class="tc-icon">🏃</div>
+            <div class="tc-name">Base Build</div>
+            <div class="tc-hint">Balanced · Scenic · Steady</div>
+          </div>
+          <div class="training-card tempo" onclick="selectTrainingMode(this, 'tempo')">
+            <div class="tc-icon">⚡</div>
+            <div class="tc-name">Tempo</div>
+            <div class="tc-hint">Moderate · No Signals · Fast</div>
+          </div>
+          <div class="training-card hills" onclick="selectTrainingMode(this, 'hills')">
+            <div class="tc-icon">🔺</div>
+            <div class="tc-name">Hill Training</div>
+            <div class="tc-hint">Hilly · Climb-focused</div>
+          </div>
+        </div>
+        <div class="training-advisory" id="trainingAdvisory"></div>
+      </div>
+
       <div class="control-group" id="weatherWidget"
         style="display: none; padding: 10px; background: rgba(74, 144, 217, 0.08); border-radius: 8px; border: 1px solid var(--border); margin-top: 4px; margin-bottom: 8px;">
         <label style="margin-bottom: 4px;">Weather & Air Quality</label>
@@ -1491,6 +1577,8 @@
     let prioritizeSafety = false;
     let avoidUnlitStreets = false;
     let preferScenic = false;
+    let activeTrainingMode = null;
+    let currentWeatherData = null;
     let currentRouteData = null;
     let routeLayerGroup = null;
     let signalLayerGroup = null;
@@ -1647,6 +1735,160 @@
         const targetVal = currentUnit === 'km' ? parseFloat(b.dataset.km) : parseFloat(b.dataset.mi);
         b.classList.toggle('selected', Math.abs(val - targetVal) < 0.1);
       });
+    }
+
+    // ========== Smart Training Mode ==========
+    const TRAINING_CONFIGS = {
+      easy: {
+        profile: 'flat',
+        avoidSignals: true,
+        prioritizeSafety: true,
+        avoidUnlit: false,
+        preferScenic: true,
+        distanceKm: 5.0,
+        presetKm: 5,
+      },
+      base: {
+        profile: 'moderate',
+        avoidSignals: false,
+        prioritizeSafety: false,
+        avoidUnlit: false,
+        preferScenic: true,
+        distanceKm: 8.0,
+        presetKm: 10,
+      },
+      tempo: {
+        profile: 'moderate',
+        avoidSignals: true,
+        prioritizeSafety: true,
+        avoidUnlit: false,
+        preferScenic: false,
+        distanceKm: 8.0,
+        presetKm: 10,
+      },
+      hills: {
+        profile: 'hilly',
+        avoidSignals: true,
+        prioritizeSafety: false,
+        avoidUnlit: false,
+        preferScenic: true,
+        distanceKm: 10.0,
+        presetKm: 10,
+      },
+    };
+
+    function selectTrainingMode(el, mode) {
+      // Deselect if same card tapped again
+      if (activeTrainingMode === mode) {
+        el.classList.remove('selected');
+        activeTrainingMode = null;
+        document.getElementById('trainingAdvisory').style.display = 'none';
+        return;
+      }
+
+      activeTrainingMode = mode;
+      document.querySelectorAll('.training-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+
+      const cfg = TRAINING_CONFIGS[mode];
+
+      // Apply elevation profile
+      document.querySelectorAll('.profile-card').forEach(c => {
+        c.classList.toggle('selected', c.dataset.profile === cfg.profile);
+      });
+      selectedProfile = cfg.profile;
+
+      // Apply toggles
+      _applyToggle('toggleSignals', cfg.avoidSignals);  avoidSignals = cfg.avoidSignals;
+      _applyToggle('toggleSafety',  cfg.prioritizeSafety); prioritizeSafety = cfg.prioritizeSafety;
+      _applyToggle('toggleUnlit',   cfg.avoidUnlit);   avoidUnlitStreets = cfg.avoidUnlit;
+      _applyToggle('toggleScenic',  cfg.preferScenic); preferScenic = cfg.preferScenic;
+
+      // Apply distance
+      const distInput = document.getElementById('distanceInput');
+      const km = cfg.distanceKm;
+      distInput.value = currentUnit === 'km' ? km.toFixed(1) : (km * 0.621371).toFixed(1);
+      updatePresetSelection();
+
+      // Show condition-aware advisory
+      _updateTrainingAdvisory(mode);
+    }
+
+    function _applyToggle(id, active) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (active) el.classList.add('active');
+      else el.classList.remove('active');
+    }
+
+    function _updateTrainingAdvisory(mode) {
+      const advisory = document.getElementById('trainingAdvisory');
+      if (!advisory) return;
+
+      const labels = { easy: 'Easy Recovery', base: 'Base Build', tempo: 'Tempo', hills: 'Hill Training' };
+      const icons  = { easy: '🌊', base: '🏃', tempo: '⚡', hills: '🔺' };
+
+      let statusClass = 'good';
+      let msg = '';
+
+      if (currentWeatherData) {
+        const comfort = currentWeatherData.comfort_score ?? 100;
+        const aqi     = currentWeatherData.aqi ?? 0;
+        const tempC   = currentWeatherData.temperature_c;
+        const tempStr = tempC != null
+          ? (currentUnit === 'km' ? `${tempC}°C` : `${Math.round(tempC * 9/5 + 32)}°F`)
+          : '';
+
+        const badAqi     = aqi > 100;
+        const lowComfort = comfort < 40;
+        const hotDay     = tempC != null && tempC > 30;
+        const coldDay    = tempC != null && tempC < 5;
+
+        if (mode === 'easy') {
+          if (badAqi) {
+            statusClass = 'caution';
+            msg = `⚠️ AQI ${aqi} — even easy runs can irritate lungs. Consider masking up.`;
+          } else {
+            msg = `✅ Good conditions for recovery ${tempStr ? `(${tempStr})` : ''}. Flat + scenic route auto-configured.`;
+          }
+        } else if (mode === 'base') {
+          if (badAqi || hotDay) {
+            statusClass = 'caution';
+            msg = `⚠️ ${hotDay ? `Hot (${tempStr})` : `AQI ${aqi}`} — reduce pace or switch to Easy.`;
+          } else {
+            msg = `✅ Solid base-build day ${tempStr ? `· ${tempStr}` : ''}. Balanced route with scenic boost ready.`;
+          }
+        } else if (mode === 'tempo') {
+          if (badAqi || hotDay || coldDay) {
+            statusClass = 'warning';
+            msg = `🔴 ${hotDay ? `Heat (${tempStr})` : badAqi ? `AQI ${aqi}` : `Cold (${tempStr})`} — hard efforts in these conditions carry risk. Consider Easy instead.`;
+          } else if (lowComfort) {
+            statusClass = 'caution';
+            msg = `⚠️ Comfort score ${comfort}/100 — wind or humidity may affect your pace target.`;
+          } else {
+            msg = `✅ Great conditions for tempo ${tempStr ? `· ${tempStr}` : ''}. Route avoids signals for uninterrupted effort.`;
+          }
+        } else if (mode === 'hills') {
+          if (badAqi || hotDay) {
+            statusClass = 'warning';
+            msg = `🔴 ${hotDay ? `Heat (${tempStr})` : `AQI ${aqi}`} — hill efforts spike HR fast. Switch to Base Build today.`;
+          } else {
+            msg = `✅ Good for climbing ${tempStr ? `· ${tempStr}` : ''}. Hill profile + scenic trails auto-configured.`;
+          }
+        }
+      } else {
+        const tips = {
+          easy:  'Flat + scenic + safe routing auto-configured. Great for active recovery.',
+          base:  'Balanced elevation + scenic boost. Steady aerobic build.',
+          tempo: 'Moderate route + no signals for uninterrupted effort.',
+          hills: 'Hilly profile to maximize elevation gain. Signals avoided.',
+        };
+        msg = `${icons[mode]} ${labels[mode]}: ${tips[mode]}`;
+      }
+
+      advisory.textContent = msg;
+      advisory.className = `training-advisory ${statusClass}`;
+      advisory.style.display = 'block';
     }
 
     // ========== Route mode toggle ==========
@@ -1842,7 +2084,15 @@
 
         // Attach weather data to route data for updateStats()
         if (weatherResp.ok) {
-          data.weather_advisory = await weatherResp.json();
+          const wx = await weatherResp.json();
+          data.weather_advisory = wx;
+          currentWeatherData = {
+            comfort_score: wx.comfort_score,
+            aqi: wx.us_aqi,
+            temperature_c: wx.temperature_c,
+          };
+          // Refresh training advisory if a mode is active
+          if (activeTrainingMode) _updateTrainingAdvisory(activeTrainingMode);
         }
 
         document.getElementById('btnStartRun').disabled = false;
