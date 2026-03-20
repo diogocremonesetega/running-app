@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: pathwise-backend
+    runtime: docker
+    plan: starter # Starter plan required for background workers and Postgres
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pathwise-db
+          property: connectionString
+      - key: PORT
+        value: 8000
+      - key: OPEN_METEO_URL
+        value: https://api.open-meteo.com/v1/forecast
+      # - key: GOOGLE_MAPS_API_KEY
+      #   sync: false # Set this manually in the Render UI
+
+databases:
+  - name: pathwise-db
+    plan: starter
+    region: oregon
+    postgresMajorVersion: 15
