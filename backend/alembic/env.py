@@ -1,7 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from geoalchemy2 import alembic_helpers
@@ -74,6 +74,10 @@ async def run_async_migrations() -> None:
     )
 
     async with connectable.connect() as connection:
+        # Guarantee PostGIS exists before attempting to create spatial tables
+        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await connection.commit()
+        
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()
