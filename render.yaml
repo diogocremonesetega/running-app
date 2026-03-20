@@ -2,6 +2,7 @@ services:
   - type: web
     name: pathwise-backend
     runtime: docker
+    rootDir: backend
     plan: free # Starter plan required for background workers and Postgres
     region: oregon
     envVars:
