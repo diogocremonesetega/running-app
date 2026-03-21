@@ -185,6 +185,12 @@ async def generate_loop_route(
         Dict with route data, elevation profile, and metadata.
     """
     # 1. Generate waypoints
+    from app.config import settings
+    if settings.graphhopper_api_key:
+        # Free public API restricts custom_model requests to exactly 5 total points
+        # Start (1) + Circle (3) + End (1) = 5
+        num_waypoints = min(num_waypoints, 3)
+
     circle_wps = generate_circle_waypoints(
         center_lat=start_lat,
         center_lng=start_lng,
