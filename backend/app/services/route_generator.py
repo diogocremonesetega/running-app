@@ -299,21 +299,9 @@ async def generate_loop_route(
 
     from app.config import settings
     if settings.graphhopper_api_key:
-        if not custom_model:
-            custom_model = {"priority": []}
-        if "priority" not in custom_model:
-            custom_model["priority"] = []
-
-        if profile == "foot_flat_recovery":
-            custom_model["priority"].extend([
-                {"if": "slope > 6", "multiply_by": "0.1"},
-                {"if": "slope < -6", "multiply_by": "0.1"}
-            ])
-        elif profile == "foot_hill_training":
-            custom_model["priority"].append({"if": "slope > 4", "multiply_by": "1.5"})
-        elif profile == "foot_no_signals":
-            custom_model["priority"].append({"if": "toll == toll", "multiply_by": "0.5"})
-
+        # Free public API completely bans custom_model and flexible routing.
+        # We must aggressively strip the custom model and degrade to a standard route.
+        custom_model = None
         profile = "foot"
 
     if custom_model:

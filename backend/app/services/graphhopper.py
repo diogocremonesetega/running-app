@@ -66,7 +66,8 @@ async def get_route(
     params.append(("profile", profile))
     params.append(("elevation", str(elevation).lower()))
     params.append(("points_encoded", "false"))
-    params.append(("ch.disable", "true"))
+    if not settings.graphhopper_api_key:
+        params.append(("ch.disable", "true"))
     params.append(("instructions", "true"))
     params.append(("calc_points", "true"))
 
