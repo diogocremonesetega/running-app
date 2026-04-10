@@ -84,10 +84,17 @@ async def refresh_scenic_segments(bbox: str = DEFAULT_BBOX) -> int:
     query = _build_overpass_query(bbox)
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        headers = {"User-Agent": "RunningRouteGenerator/1.0 (Contact: admin@example.com)"}
+        async with httpx.AsyncClient(timeout=60.0, headers=headers) as client:
             resp = await client.post(OVERPASS_URL, data=query)
             resp.raise_for_status()
             data = resp.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning(f"Overpass API rejected the request ({exc.response.status_code}). Scenic data will be stale.")
+        return 0
+    except httpx.TimeoutException:
+        logger.warning("Overpass API timed out. Scenic data will be stale.")
+        return 0
     except Exception as exc:
         logger.error(f"OSM Overpass fetch failed: {exc}")
         return 0

@@ -21,15 +21,25 @@ async def _run_periodic(task_fn: Callable[[], Coroutine[Any, Any, int]], interva
     If the task fails, it retries after a shorter 60-second delay instead of 
     waiting the full interval.
     """
-    retry_interval = 60  # Retry quickly on failure
+    retry_interval = 60
     while True:
         try:
             count = await task_fn()
             logger.info(f"[{name}] refreshed {count} zones.")
+            retry_interval = 60  # Reset on success
             await asyncio.sleep(interval)
         except Exception as exc:
-            logger.error(f"[{name}] refresh failed: {exc}. Retrying in {retry_interval}s...")
+            # Use concise logging for external API failures
+            err_msg = str(exc)
+            if "HTTPStatusError" in type(exc).__name__:
+                err_msg = getattr(exc, "response", {}).status_code if hasattr(exc, "response") else str(exc)
+                logger.warning(f"[{name}] API unavailable (HTTP {err_msg}). Retrying in {retry_interval}s...")
+            else:
+                logger.error(f"[{name}] refresh failed: {exc}. Retrying in {retry_interval}s...")
+            
             await asyncio.sleep(retry_interval)
+            # Exponential backoff up to the standard interval
+            retry_interval = min(retry_interval * 2, interval)
 
 
 async def start_background_workers() -> None:

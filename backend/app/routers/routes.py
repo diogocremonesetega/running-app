@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import List, Literal, Optional
 
@@ -15,6 +16,8 @@ from shapely.geometry import LineString
 from app.db import get_db
 from app.models.spatial import RouteHistory
 from app.services import route_generator, graphhopper, spatial_queries, weather_data
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["routes"])
 
@@ -34,8 +37,13 @@ class GenerateRouteRequest(BaseModel):
     prioritize_safety: bool = False
     avoid_unlit_streets: bool = False
     prefer_scenic: bool = False
-    num_waypoints: int = Field(5, ge=3, le=12, description="Circle waypoints")
-    start_bearing: float = Field(0.0, ge=0, lt=360, description="Initial bearing offset")
+    start_bearing: float = Field(
+        0.0, ge=0, lt=360,
+        description=(
+            "Route variety seed (0–359). Different values produce different organic "
+            "loop shapes from the same start point via GraphHopper's round_trip seed."
+        ),
+    )
 
 
 class PointToPointRequest(BaseModel):
@@ -51,7 +59,7 @@ class PointToPointRequest(BaseModel):
 
 @router.post("/generate-route")
 async def generate_route(req: GenerateRouteRequest):
-    """Generate a loop running route with circle-based waypoints.
+    """Generate an organic loop running route via GraphHopper's native round_trip algorithm.
 
     Returns the route GeoJSON, elevation profile, slope segments,
     and summary statistics.
@@ -66,7 +74,6 @@ async def generate_route(req: GenerateRouteRequest):
             prioritize_safety=req.prioritize_safety,
             avoid_unlit_streets=req.avoid_unlit_streets,
             prefer_scenic=req.prefer_scenic,
-            num_waypoints=req.num_waypoints,
             start_bearing=req.start_bearing,
         )
         
@@ -76,8 +83,10 @@ async def generate_route(req: GenerateRouteRequest):
         
         return result
     except graphhopper.GraphHopperError as e:
+        logger.exception("GraphHopper error during route generation")
         raise HTTPException(status_code=502, detail=f"GraphHopper error: {e.detail}")
     except Exception as e:
+        logger.exception("Unhandled exception in generate_route")
         raise HTTPException(status_code=500, detail=str(e))
 
 

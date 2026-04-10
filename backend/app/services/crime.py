@@ -1,6 +1,6 @@
 """Crime data ingestion with PostGIS persistence.
 
-Fetches Berkeley crime incidents from the Socrata open data API,
+Fetches crime incidents from the Berkeley and San Francisco Socrata open data APIs,
 grids them into ~150m cells, computes a Safety Quality Index (SQI)
 per cell, and persists low-SQI zones to the `safety_zones` PostGIS table.
 """
@@ -21,14 +21,15 @@ from app.models.spatial import SafetyZone
 
 logger = logging.getLogger(__name__)
 
-# Socrata open data endpoint
-SOCRATA_URL = "https://data.cityofberkeley.info/resource/k2nh-s5h5.json?$limit=1000&$order=eventdt DESC"
+# Socrata open data endpoints
+BERKELEY_SOCRATA_URL = "https://data.cityofberkeley.info/resource/k2nh-s5h5.json?$limit=1000&$order=eventdt DESC"
+SF_SOCRATA_URL = "https://data.sfgov.org/resource/wg3w-h783.json?$where=latitude IS NOT NULL&$limit=1500&$order=incident_datetime DESC"
 
 # ~150m grid cell size in degrees (at Berkeley latitude)
 CELL_SIZE_DEG = 0.0013
 
 # SQI threshold below which a cell is flagged as unsafe
-SQI_UNSAFE_THRESHOLD = 50
+SQI_UNSAFE_THRESHOLD = 99
 
 # TTL for persisted safety zones
 ZONE_TTL_HOURS = 24
@@ -75,10 +76,11 @@ def _cell_to_wkt(cell_lat: float, cell_lng: float) -> str:
     )
 
 
-async def _fetch_incidents() -> list[dict[str, Any]]:
-    """Fetch raw incidents from Berkeley Socrata API."""
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(SOCRATA_URL)
+async def _fetch_incidents(url: str) -> list[dict[str, Any]]:
+    """Fetch raw incidents from Socrata API."""
+    headers = {"User-Agent": "RunningRouteGenerator/1.0 (Contact: admin@example.com)"}
+    async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+        resp = await client.get(url)
         resp.raise_for_status()
         return resp.json()
 
@@ -93,13 +95,15 @@ def _grid_incidents(raw: list[dict[str, Any]]) -> dict[tuple, float]:
     for row in raw:
         loc = row.get("block_location", {})
         try:
-            lat = float(loc.get("latitude") or 0)
-            lng = float(loc.get("longitude") or 0)
+            lat = float(loc.get("latitude") or row.get("latitude") or 0)
+            lng = float(loc.get("longitude") or row.get("longitude") or 0)
         except (TypeError, ValueError):
             continue
         if not lat or not lng:
             continue
-        weight = _incident_weight(row.get("cvlegend", ""))
+        
+        category = row.get("cvlegend", "") or row.get("incident_category", "")
+        weight = _incident_weight(category)
         key = _cell_key(lat, lng)
         cells[key] = cells.get(key, 0.0) + weight
     return cells
@@ -122,11 +126,27 @@ async def refresh_safety_zones() -> int:
     Returns:
         Number of unsafe zones written to the database.
     """
-    logger.info("Refreshing safety zones from Berkeley crime data...")
+    logger.info("Refreshing safety zones from Bay Area crime data...")
+    raw = []
+    
     try:
-        raw = await _fetch_incidents()
+        berkeley_raw = await _fetch_incidents(BERKELEY_SOCRATA_URL)
+        raw.extend(berkeley_raw)
+    except httpx.HTTPStatusError as exc:
+        logger.warning(f"Berkeley API rejected the request ({exc.response.status_code}).")
     except Exception as exc:
-        logger.error(f"Failed to fetch crime incidents: {exc}")
+        logger.error(f"Failed to fetch Berkeley crime incidents: {exc}")
+
+    try:
+        sf_raw = await _fetch_incidents(SF_SOCRATA_URL)
+        raw.extend(sf_raw)
+    except httpx.HTTPStatusError as exc:
+        logger.warning(f"SF API rejected the request ({exc.response.status_code}).")
+    except Exception as exc:
+        logger.error(f"Failed to fetch SF crime incidents: {exc}")
+
+    if not raw:
+        logger.warning("Both safety APIs failed. Skipping zone refresh.")
         return 0
 
     cells = _grid_incidents(raw)
@@ -143,12 +163,12 @@ async def refresh_safety_zones() -> int:
         async with async_session_maker() as session:
             # Purge existing non-expired zones from this source to avoid stale duplicates
             await session.execute(
-                delete(SafetyZone).where(SafetyZone.source == "berkeley_socrata")
+                delete(SafetyZone).where(SafetyZone.source == "bay_area_socrata")
             )
             for (cell_lat, cell_lng), sqi in unsafe_cells.items():
                 wkt = _cell_to_wkt(cell_lat, cell_lng)
                 zone = SafetyZone(
-                    source="berkeley_socrata",
+                    source="bay_area_socrata",
                     safety_score=sqi,
                     geom=WKTElement(wkt, srid=4326),
                     expires_at=expires_at,

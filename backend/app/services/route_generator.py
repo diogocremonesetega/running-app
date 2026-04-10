@@ -1,7 +1,9 @@
-"""Circle-based loop route generator.
+"""Native round_trip loop route generator.
 
-Generates running loops by placing waypoints on a circle around a
-starting point, then routing through them via GraphHopper.
+Generates running loops by invoking GraphHopper's built-in round_trip
+algorithm from a single start point. Custom model area overlays (safety
+zones, closures, scenic segments, unlit streets) are composed per-request
+and submitted alongside the algorithm directive.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import math
 import re
 from typing import Any
 
+import httpx
 from shapely.geometry import shape, mapping
 
 from app.services import graphhopper
@@ -55,74 +58,6 @@ def _to_polygon_geometry(geojson_geom: dict) -> dict | None:
 
 # --- Geometry helpers ---
 
-def _destination_point(lat: float, lng: float, bearing_deg: float, distance_km: float) -> tuple[float, float]:
-    """Compute destination point given start, bearing, and distance.
-
-    Uses the Vincenty direct formula (spherical approximation).
-
-    Args:
-        lat: Start latitude in degrees.
-        lng: Start longitude in degrees.
-        bearing_deg: Bearing in degrees (0=North, 90=East).
-        distance_km: Distance in kilometers.
-
-    Returns:
-        (lat, lng) of the destination point.
-    """
-    R = 6371.0  # Earth radius in km
-    d = distance_km / R  # angular distance in radians
-
-    lat1 = math.radians(lat)
-    lng1 = math.radians(lng)
-    brng = math.radians(bearing_deg)
-
-    lat2 = math.asin(
-        math.sin(lat1) * math.cos(d) + math.cos(lat1) * math.sin(d) * math.cos(brng)
-    )
-    lng2 = lng1 + math.atan2(
-        math.sin(brng) * math.sin(d) * math.cos(lat1),
-        math.cos(d) - math.sin(lat1) * math.sin(lat2),
-    )
-
-    return (math.degrees(lat2), math.degrees(lng2))
-
-
-def generate_circle_waypoints(
-    center_lat: float,
-    center_lng: float,
-    distance_km: float,
-    num_waypoints: int = 5,
-    start_bearing: float = 0.0,
-) -> list[tuple[float, float]]:
-    """Generate waypoints on a circle for a loop route.
-
-    Places N waypoints evenly distributed on a circle around the
-    center point. The circle radius is derived from the target
-    total route distance: r ≈ distance / (2π).
-
-    Args:
-        center_lat: Center latitude (start/end point).
-        center_lng: Center longitude (start/end point).
-        distance_km: Target total route distance in km.
-        num_waypoints: Number of intermediate waypoints.
-        start_bearing: Initial bearing offset in degrees.
-
-    Returns:
-        List of (lat, lng) waypoints (does NOT include start/end).
-    """
-    # Radius of the circle — approximate so total loop ≈ target distance
-    radius_km = distance_km / (2 * math.pi)
-
-    # Distribute waypoints evenly around the circle
-    bearing_step = 360.0 / num_waypoints
-    waypoints = []
-
-    for i in range(num_waypoints):
-        bearing = (start_bearing + i * bearing_step) % 360
-        wp = _destination_point(center_lat, center_lng, bearing, radius_km)
-        waypoints.append(wp)
-
-    return waypoints
 
 
 # --- Profile selection ---
@@ -136,16 +71,10 @@ ELEVATION_PROFILES = {
 SIGNAL_AVOIDANCE_PROFILE = "foot_no_signals"
 
 
-def _select_profile(elevation_preference: str, avoid_traffic_signals: bool) -> str:
-    """Select the best GraphHopper profile based on user preferences.
-
-    If traffic signal avoidance is requested, we use the dedicated
-    foot_no_signals profile. Elevation preferences are only applied
-    when signal avoidance is off (the no-signals profile already
-    includes moderate elevation handling).
+def _select_profile(elevation_preference: str) -> str:
+    """Select the GraphHopper profile based purely on the elevation preference.
+    Signal avoidance is injected dynamically at runtime via custom_models.
     """
-    if avoid_traffic_signals:
-        return SIGNAL_AVOIDANCE_PROFILE
     return ELEVATION_PROFILES.get(elevation_preference, "foot_elevation")
 
 
@@ -160,17 +89,15 @@ async def generate_loop_route(
     prioritize_safety: bool = False,
     avoid_unlit_streets: bool = False,
     prefer_scenic: bool = False,
-    num_waypoints: int = 5,
     start_bearing: float = 0.0,
 ) -> dict[str, Any]:
-    """Generate a loop running route with elevation and signal awareness.
+    """Generate a loop running route with elevation and signal awareness using GraphHopper's round_trip API.
 
     Flow:
-    1. Generate circle-based waypoints around the start.
-    2. Build the full waypoint list: start → wp1 → wp2 → ... → wpN → start.
-    3. Select the appropriate GraphHopper profile.
-    4. Call GraphHopper and parse the response.
-    5. Extract elevation profile and slope data.
+    1. Define the start point.
+    2. Select the appropriate GraphHopper profile.
+    3. Call GraphHopper with algorithm="round_trip" and the distance parameter.
+    4. Extract elevation profile and slope data.
 
     Args:
         start_lat: Starting latitude.
@@ -178,32 +105,60 @@ async def generate_loop_route(
         distance_km: Target total distance in km.
         elevation_preference: "flat", "moderate", or "hilly".
         avoid_traffic_signals: Penalize roads with traffic signals.
-        num_waypoints: Number of intermediate circle waypoints.
-        start_bearing: Compass bearing for the first waypoint.
+        start_bearing: Seed value (0-359) that controls which loop variant
+            GraphHopper produces. Same start + same bearing = same route.
+            Different bearing = different organic loop from the same start.
 
     Returns:
         Dict with route data, elevation profile, and metadata.
     """
-    # 1. Generate waypoints
-    from app.config import settings
-    if settings.graphhopper_api_key:
-        # Free public API restricts custom_model requests to exactly 5 total points
-        # Start (1) + Circle (3) + End (1) = 5
-        num_waypoints = min(num_waypoints, 3)
+    import random
 
-    circle_wps = generate_circle_waypoints(
-        center_lat=start_lat,
-        center_lng=start_lng,
-        distance_km=distance_km,
-        num_waypoints=num_waypoints,
-        start_bearing=start_bearing,
-    )
+    # 1. Define start point. For hilly mode, we'll inject a peak anchor below.
+    all_waypoints: list[tuple[float, float]] = [(start_lat, start_lng)]
+    peak_waypoint_index: int | None = None  # tracks which waypoint is the summit
 
-    # 2. Build full waypoint sequence (loop: start → waypoints → start)
-    all_waypoints = [(start_lat, start_lng)] + circle_wps + [(start_lat, start_lng)]
+    # 2. Select base elevation profile
+    profile = _select_profile(elevation_preference)
 
-    # 3. Select profile
-    profile = _select_profile(elevation_preference, avoid_traffic_signals)
+    # --- Step 1 & 2: Spatial Elevation Query + Waypoint Injection (Hilly mode only) ---
+    if elevation_preference == "hilly":
+        from app.services import spatial_queries as _sq_peak
+        # Search within ~60% of the run radius so we don't anchor too far away
+        search_radius_m = (distance_km * 1000.0) * 0.60
+        peak = await _sq_peak.find_highest_peak_near(start_lat, start_lng, radius_m=search_radius_m)
+
+        if peak:
+            import logging as _log
+            _log.getLogger(__name__).info(
+                "Hilly anchor: %s (%.0fm elev) @ %.5f, %.5f",
+                peak["name"], peak["ele"], peak["lat"], peak["lng"]
+            )
+            # Inject: start → peak → semi-random return point → back to start
+            # Semi-random return point: offset from start in the opposite direction of the peak
+            bearing_to_peak = math.atan2(
+                peak["lng"] - start_lng,
+                peak["lat"] - start_lat
+            )
+            # Place return waypoint roughly 30% of distance_km on the opposite side
+            offset_km = distance_km * 0.30
+            offset_deg = offset_km / 111.0
+            jitter = random.uniform(-0.4, 0.4)  # radians, ~±23°
+            return_bearing = bearing_to_peak + math.pi + jitter
+            return_lat = start_lat + offset_deg * math.cos(return_bearing)
+            return_lng = start_lng + offset_deg * math.sin(return_bearing)
+
+            # Build: [start, peak, return_point, start]
+            all_waypoints = [
+                (start_lat, start_lng),
+                (peak["lat"], peak["lng"]),   # index 1 = summit (pass_through)
+                (return_lat, return_lng),
+                (start_lat, start_lng),        # close the loop
+            ]
+            peak_waypoint_index = 1  # Step 3: flag summit for U-turn allowance
+        else:
+            import logging as _log
+            _log.getLogger(__name__).warning("No OSM peak found within %.0fm — falling back to round_trip", search_radius_m)
 
     # 4. Call GraphHopper
     # GraphHopper v10: areas = FeatureCollection; each feature needs "id".
@@ -244,58 +199,170 @@ async def generate_loop_route(
 
     # --- Scenic + unlit (only when prefer_scenic) ---
     if prefer_scenic:
-        from app.services import spatial_queries as _sq2
-        from app.services import lighting_data
+        try:
+            from app.services import spatial_queries as _sq2
+            from app.services import lighting_data
 
-        scenic_segs = await _sq2.get_scenic_segments_near(start_lat, start_lng, radius_m=4000)
-        for i, s in enumerate(scenic_segs):
-            geojson = json.loads(s["geojson"])
-            geom = shape(geojson)
-            buffered = geom.buffer(0.0001)
-            poly = _to_polygon_geometry(mapping(buffered))
-            if poly:
-                boost = str(round(1.0 + (s["gvi_score"] * 2), 1))
-                _add_area(f"scenic_{i}", poly, boost)
+            scenic_segs = await _sq2.get_scenic_segments_near(start_lat, start_lng, radius_m=4000)
+            for i, s in enumerate(scenic_segs):
+                geojson = json.loads(s["geojson"])
+                geom = shape(geojson)
+                buffered = geom.buffer(0.0001)
+                poly = _to_polygon_geometry(mapping(buffered))
+                if poly:
+                    boost = str(round(1.0 + (s["gvi_score"] * 2), 1))
+                    _add_area(f"scenic_{i}", poly, boost)
 
-        lats = [wp[0] for wp in all_waypoints]
-        lngs = [wp[1] for wp in all_waypoints]
-        min_lat, max_lat = min(lats) - 0.005, max(lats) + 0.005
-        min_lng, max_lng = min(lngs) - 0.005, max(lngs) + 0.005
-        bbox = f"{min_lat},{min_lng},{max_lat},{max_lng}"
-        unlit_zones = await lighting_data.fetch_unlit_streets(bbox)
+            # Bounding box calculation for unlit areas based on expected route radius
+            # Roughly estimate 1 degree ~ 111km
+            radius_deg = (distance_km / 2.0) / 111.0
+            min_lat, max_lat = start_lat - radius_deg, start_lat + radius_deg
+            min_lng, max_lng = start_lng - radius_deg, start_lng + radius_deg
+            bbox = f"{min_lat},{min_lng},{max_lat},{max_lng}"
+            unlit_zones = await lighting_data.fetch_unlit_streets(bbox)
 
-        def _unlit_sort_key(z: dict[str, float]) -> float:
-            clat = (z["min_lat"] + z["max_lat"]) / 2
-            clng = (z["min_lng"] + z["max_lng"]) / 2
-            return _haversine_km(start_lat, start_lng, clat, clng)
+            def _unlit_sort_key(z: dict[str, float]) -> float:
+                clat = (z["min_lat"] + z["max_lat"]) / 2
+                clng = (z["min_lng"] + z["max_lng"]) / 2
+                return _haversine_km(start_lat, start_lng, clat, clng)
 
-        unlit_zones = sorted(unlit_zones, key=_unlit_sort_key)[:MAX_UNLIT_AREAS]
+            unlit_zones = sorted(unlit_zones, key=_unlit_sort_key)[:MAX_UNLIT_AREAS]
 
-        for i, z in enumerate(unlit_zones):
-            poly = {
-                "type": "Polygon",
-                "coordinates": [[
-                    [z["min_lng"], z["min_lat"]],
-                    [z["max_lng"], z["min_lat"]],
-                    [z["max_lng"], z["max_lat"]],
-                    [z["min_lng"], z["max_lat"]],
-                    [z["min_lng"], z["min_lat"]],
-                ]],
-            }
-            _add_area(f"unlit_{i}", poly, "0.2")
+            for i, z in enumerate(unlit_zones):
+                poly = {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [z["min_lng"], z["min_lat"]],
+                        [z["max_lng"], z["min_lat"]],
+                        [z["max_lng"], z["max_lat"]],
+                        [z["min_lng"], z["max_lat"]],
+                        [z["min_lng"], z["min_lat"]],
+                    ]],
+                }
+                _add_area(f"unlit_{i}", poly, "0.2")
+
+        except httpx.HTTPStatusError as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "Scenic/unlit data unavailable (HTTP %s) — route will be generated without scenic multipliers.",
+                exc.response.status_code,
+            )
+        except httpx.TimeoutException:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "Overpass API timed out fetching scenic/unlit data — route will be generated without scenic multipliers."
+            )
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger(__name__).error(
+                "Scenic data fetch failed (%s: %s) — route will be generated without scenic multipliers.",
+                type(exc).__name__, exc,
+            )
+
+    # --- Local area bounding box (prevents routing across flat bridges leading deep out of the city) ---
+    # Clamp the bounding radius: a round-trip loop covers at most ~half the distance outward.
+    # Use 0.7x as geofence radius, but ensure the requested distance is achievable within it.
+    max_radius_km = distance_km * 0.7
+    radius_deg_lat = max_radius_km / 111.0
+    radius_deg_lng = max_radius_km / (111.0 * math.cos(math.radians(start_lat)))
+    bbox_min_lat, bbox_max_lat = start_lat - radius_deg_lat, start_lat + radius_deg_lat
+    bbox_min_lng, bbox_max_lng = start_lng - radius_deg_lng, start_lng + radius_deg_lng
+    local_bounds_poly = {
+        "type": "Polygon",
+        "coordinates": [[
+            [bbox_min_lng, bbox_min_lat],
+            [bbox_max_lng, bbox_min_lat],
+            [bbox_max_lng, bbox_max_lat],
+            [bbox_min_lng, bbox_max_lat],
+            [bbox_min_lng, bbox_min_lat]
+        ]]
+    }
+    # Register via _add_area so the feature id and priority rule share the same
+    # standardised naming pattern GraphHopper requires (in_<id> / !in_<id>).
+    # multiply_by "0" creates an absolute impassable boundary — no edge outside
+    # the polygon can ever be traversed.
+    _add_area("local_bounds", local_bounds_poly, "0")
+    # Override the rule produced by _add_area to use the NEGATION (!in_local_bounds)
+    # so it blocks roads OUTSIDE the fence, not inside it.
+    if area_pairs and area_pairs[-1][1].get("if", "").startswith("in_"):
+        last_feat, _ = area_pairs[-1]
+        aid = last_feat["id"]
+        area_pairs[-1] = (last_feat, {"if": f"!in_{aid}", "multiply_by": "0"})
 
     # Cap total areas (closures + safety + scenic + unlit)
     if len(area_pairs) > MAX_CUSTOM_MODEL_AREAS:
         area_pairs = area_pairs[:MAX_CUSTOM_MODEL_AREAS]
 
-    custom_model: dict[str, Any] | None = None
+    priority_rules: list[dict[str, str]] = []
+    
     if area_pairs:
         features = [p[0] for p in area_pairs]
-        priority_rules = [p[1] for p in area_pairs]
+        areas_coll = {"type": "FeatureCollection", "features": features}
+        priority_rules.extend(p[1] for p in area_pairs)
+    else:
+        areas_coll = None
+
+    if avoid_traffic_signals:
+        if elevation_preference == "hilly":
+            # Relax signal penalties for Hilly so steep secondary avenues aren't falsely rejected in favor of flat residential grids.
+            priority_rules.extend([
+                {"if": "road_class == PRIMARY", "multiply_by": "0.5"},
+                {"else_if": "road_class == SECONDARY", "multiply_by": "0.8"},
+                {"else_if": "road_class == TERTIARY", "multiply_by": "0.9"},
+                {"else_if": "road_class == FOOTWAY || road_class == PATH || road_class == PEDESTRIAN", "multiply_by": "1.5"},
+                {"else_if": "road_class == LIVING_STREET", "multiply_by": "1.3"},
+                {"else_if": "road_class == RESIDENTIAL", "multiply_by": "1.2"},
+                {"else_if": "road_class == CYCLEWAY", "multiply_by": "1.3"}
+            ])
+        else:
+            # Standard strict signal penalties
+            priority_rules.extend([
+                {"if": "road_class == PRIMARY", "multiply_by": "0.3"},
+                {"else_if": "road_class == SECONDARY", "multiply_by": "0.4"},
+                {"else_if": "road_class == TERTIARY", "multiply_by": "0.6"},
+                {"if": "road_class == FOOTWAY || road_class == PATH || road_class == PEDESTRIAN", "multiply_by": "2.0"},
+                {"else_if": "road_class == LIVING_STREET", "multiply_by": "1.8"},
+                {"else_if": "road_class == RESIDENTIAL", "multiply_by": "1.5"},
+                {"else_if": "road_class == CYCLEWAY", "multiply_by": "1.6"}
+            ])
+
+    # Enforce strict terrain bounds directly in the routing calculation using interval steps
+    if elevation_preference == "flat":
+        priority_rules.extend([
+            {"if": "average_slope > 10 || average_slope < -10", "multiply_by": "0.01"},
+            {"else_if": "average_slope > 6 || average_slope < -6", "multiply_by": "0.1"},
+            {"else_if": "average_slope > 2 || average_slope < -2", "multiply_by": "0.3"},
+            {"else_if": "average_slope > 1 || average_slope < -1", "multiply_by": "0.6"}
+        ])
+    elif elevation_preference == "hilly":
+        priority_rules.extend([
+            {"if": "average_slope > 12", "multiply_by": "5.0"},
+            {"else_if": "average_slope > 8", "multiply_by": "3.5"},
+            {"else_if": "average_slope > 4", "multiply_by": "2.0"},
+            {"else_if": "average_slope > 2", "multiply_by": "1.3"},
+            {"if": "average_slope < -12", "multiply_by": "5.0"},
+            {"else_if": "average_slope < -8", "multiply_by": "3.5"},
+            {"else_if": "average_slope < -4", "multiply_by": "2.0"},
+            {"else_if": "average_slope < -2", "multiply_by": "1.3"}
+        ])
+
+    # Force routing behavior by dynamically shifting the distance influence metrics
+    # Extreme low influence forces the algorithm to explore exclusively for mathematical elevation bounds
+    if elevation_preference == "flat":
+        dist_influence = 15
+    elif elevation_preference == "hilly":
+        dist_influence = 15
+    else:
+        dist_influence = 70
+
+    custom_model: dict[str, Any] | None = None
+    if priority_rules:
         custom_model = {
-            "areas": {"type": "FeatureCollection", "features": features},
             "priority": priority_rules,
+            "distance_influence": dist_influence
         }
+        if areas_coll:
+            custom_model["areas"] = areas_coll
 
     from app.config import settings
     if settings.graphhopper_api_key:
@@ -304,27 +371,96 @@ async def generate_loop_route(
         custom_model = None
         profile = "foot"
 
-    if custom_model:
-        gh_response = await graphhopper.post_route_with_custom_model(
-            waypoints=all_waypoints,
-            profile=profile,
-            custom_model=custom_model,
-            elevation=True,
-            details=["average_slope"],
-        )
-    else:
-        gh_response = await graphhopper.get_route(
-            waypoints=all_waypoints,
-            profile=profile,
-            elevation=True,
-            details=["average_slope"],
-        )
+    safe_seed = random.randint(0, 100000)
+
+    gh_response: dict[str, Any] | None = None
+
+    if elevation_preference == "hilly" and peak_waypoint_index is not None:
+        # ── Peak-anchored hilly route: A → Summit → Return → A ──
+        # No round_trip algorithm; we use a standard multi-waypoint route.
+        # pass_through on the summit index allows U-turns at dead-end lookouts.
+        try:
+            if custom_model:
+                gh_response = await graphhopper.post_route_with_custom_model(
+                    waypoints=all_waypoints,
+                    profile=profile,
+                    custom_model=custom_model,
+                    elevation=True,
+                    details=["average_slope"],
+                    algorithm=None,  # Standard A→B→C routing, not round_trip
+                    pass_through_indices=[peak_waypoint_index],
+                )
+            else:
+                gh_response = await graphhopper.get_route(
+                    waypoints=all_waypoints,
+                    profile=profile,
+                    elevation=True,
+                    details=["average_slope"],
+                )
+        except graphhopper.GraphHopperError as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "Peak-anchored hilly route failed (GH %s) — falling back to round_trip.",
+                exc.status_code,
+            )
+            # Reset to single-waypoint round_trip fallback
+            all_waypoints = [(start_lat, start_lng)]
+            peak_waypoint_index = None
+            gh_response = None
+
+    # Standard round_trip path (used for flat/moderate, and as fallback for failed hilly)
+    if gh_response is None:
+        try:
+            if custom_model:
+                gh_response = await graphhopper.post_route_with_custom_model(
+                    waypoints=all_waypoints,
+                    profile=profile,
+                    custom_model=custom_model,
+                    elevation=True,
+                    details=["average_slope"],
+                    algorithm="round_trip",
+                    round_trip_distance_m=distance_km * 1000.0,
+                    round_trip_seed=safe_seed,
+                )
+            else:
+                gh_response = await graphhopper.get_route(
+                    waypoints=all_waypoints,
+                    profile=profile,
+                    elevation=True,
+                    details=["average_slope"],
+                    algorithm="round_trip",
+                    round_trip_distance_m=distance_km * 1000.0,
+                    round_trip_seed=safe_seed,
+                )
+        except graphhopper.GraphHopperError as exc:
+            import logging as _log
+            _log.getLogger(__name__).error(
+                "GraphHopper routing failed entirely (GH %s): %s",
+                exc.status_code, exc.detail[:200],
+            )
+            return {
+                "error": "Route generation failed",
+                "warning": (
+                    f"The routing engine could not find a valid path. "
+                    f"This may happen if the requested distance ({distance_km} km) exceeds "
+                    f"the routable area, or if elevation constraints are too strict. "
+                    f"Try reducing the distance or switching to a moderate profile."
+                ),
+                "graphhopper_status": exc.status_code,
+                "waypoints_generated": [{"lat": start_lat, "lng": start_lng}],
+            }
 
     # 5. Parse the best path
-    if not gh_response.get("paths"):
+    if not gh_response or not gh_response.get("paths"):
         return {
             "error": "No route found",
-            "waypoints_generated": [{"lat": w[0], "lng": w[1]} for w in circle_wps],
+            "warning": (
+                f"GraphHopper returned no viable path for a {distance_km} km "
+                f"{elevation_preference} route from ({start_lat:.4f}, {start_lng:.4f}). "
+                f"The strict bounding constraints or elevation penalties may have "
+                f"eliminated all candidates. Try a shorter distance or a different profile."
+            ),
+            "waypoints_generated": [{"lat": start_lat, "lng": start_lng}],
         }
 
     best_path = gh_response["paths"][0]
@@ -355,7 +491,7 @@ async def generate_loop_route(
         "elevation_profile": elevation_profile,
         "slope_segments": slope_segments,
         "elevation_stats": _compute_elevation_stats(elevation_profile),
-        "waypoints_generated": [{"lat": w[0], "lng": w[1]} for w in circle_wps],
+        "waypoints_generated": [{"lat": start_lat, "lng": start_lng}],
         "instructions": best_path.get("instructions", []),
     }
 

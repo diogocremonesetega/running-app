@@ -60,7 +60,8 @@ async def _fetch_wzdx() -> list[dict[str, Any]]:
     """Parse Caltrans WZDx GeoJSON feed into closure dicts."""
     closures = []
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        headers = {"User-Agent": "RunningRouteGenerator/1.0 (Contact: admin@example.com)"}
+        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
             resp = await client.get(CALTRANS_WZDX_URL)
             resp.raise_for_status()
             data = resp.json()
@@ -90,6 +91,10 @@ async def _fetch_wzdx() -> list[dict[str, Any]]:
                 "start_time": _parse_dt(start_str),
                 "end_time": _parse_dt(end_str),
             })
+    except httpx.HTTPStatusError as exc:
+        logger.warning(f"Caltrans WZDx API rejected the request ({exc.response.status_code}). Closure data will be stale.")
+    except httpx.TimeoutException:
+        logger.warning("Caltrans WZDx API timed out. Closure data will be stale.")
     except Exception as exc:
         logger.warning(f"WZDx fetch failed: {exc}")
     return closures
@@ -102,7 +107,8 @@ async def _fetch_511sf() -> list[dict[str, Any]]:
     closures = []
     try:
         url = BAY511_URL.format(key=settings.bay511_api_key)
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        headers = {"User-Agent": "RunningRouteGenerator/1.0 (Contact: admin@example.com)"}
+        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
@@ -124,6 +130,10 @@ async def _fetch_511sf() -> list[dict[str, Any]]:
                 "start_time": _parse_dt(event.get("created")),
                 "end_time": _parse_dt(event.get("updated")),
             })
+    except httpx.HTTPStatusError as exc:
+        logger.warning(f"511 SF Bay API rejected the request ({exc.response.status_code}). Closure data will be stale.")
+    except httpx.TimeoutException:
+        logger.warning("511 SF Bay API timed out. Closure data will be stale.")
     except Exception as exc:
         logger.warning(f"511 SF Bay fetch failed: {exc}")
     return closures

@@ -1,8 +1,11 @@
 """Reusable PostGIS spatial queries for route generation."""
 
 import logging
+import math
 from datetime import datetime, timezone
+from typing import Optional
 
+import httpx
 from geoalchemy2.elements import WKTElement
 from geoalchemy2.functions import ST_AsGeoJSON
 from sqlalchemy import select, and_
@@ -12,6 +15,67 @@ from app.db import async_session_maker
 from app.models.spatial import SafetyZone, ClosureZone, ScenicSegment
 
 logger = logging.getLogger(__name__)
+
+_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
+
+async def find_highest_peak_near(
+    lat: float,
+    lng: float,
+    radius_m: float = 3000,
+) -> Optional[dict]:
+    """Query OpenStreetMap Overpass API for the highest natural peak or viewpoint
+    within radius_m of the given coordinate.
+
+    Returns a dict with {lat, lng, ele, name} or None if unavailable.
+    """
+    # Extend radius slightly to handle sparse urban peak tagging
+    query = (
+        f"[out:json][timeout:10];\n"
+        f"(\n"
+        f'  node["natural"="peak"](around:{int(radius_m)},{lat},{lng});\n'
+        f'  node["tourism"="viewpoint"](around:{int(radius_m)},{lat},{lng});\n'
+        f'  node["natural"="hill"](around:{int(radius_m)},{lat},{lng});\n'
+        f");\nout body;"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                _OVERPASS_URL,
+                data={"data": query},
+                headers={"User-Agent": "PathwiseRunningApp/1.0"},
+            )
+        if resp.status_code != 200:
+            logger.warning("Overpass peak query returned %s", resp.status_code)
+            return None
+
+        elements = resp.json().get("elements", [])
+        if not elements:
+            return None
+
+        best = None
+        best_ele = -999.0
+        for el in elements:
+            tags = el.get("tags", {})
+            raw_ele = tags.get("ele", None)
+            try:
+                ele = float(raw_ele) if raw_ele else 0.0
+            except ValueError:
+                ele = 0.0
+            if ele > best_ele:
+                best_ele = ele
+                best = {
+                    "lat": el["lat"],
+                    "lng": el["lon"],
+                    "ele": ele,
+                    "name": tags.get("name", "Peak"),
+                }
+
+        return best
+
+    except Exception as exc:
+        logger.warning("Overpass peak query failed: %s", exc)
+        return None
 
 # Approximate degrees per meter at ~37° latitude
 DEG_PER_M = 1 / 111320
@@ -134,92 +198,4 @@ async def get_scenic_segments_near(lat: float, lng: float, radius_m: float = 300
             ]
     except SQLAlchemyError as exc:
         logger.error(f"Error querying scenic segments: {exc}")
-        return []
-
-
-logger = logging.getLogger(__name__)
-
-# Approximate degrees per meter at ~37° latitude
-DEG_PER_M = 1 / 111320
-
-
-async def get_active_safety_zones(lat: float, lng: float, radius_m: float = 5000) -> list[dict]:
-    """Return safety zones within radius of a point.
-
-    Each result is shaped for direct injection into GraphHopper `areas`.
-
-    Returns:
-        List of dicts: {id, safety_score, geojson_geom}
-    """
-    try:
-        async with async_session_maker() as session:
-            point = WKTElement(f"POINT({lng} {lat})", srid=4326)
-            result = await session.execute(
-                select(
-                    SafetyZone.id,
-                    SafetyZone.safety_score,
-                    SafetyZone.source,
-                    ST_AsGeoJSON(SafetyZone.geom).label("geojson"),
-                ).where(
-                    and_(
-                        SafetyZone.geom.ST_DWithin(point, radius_m * DEG_PER_M),
-                        SafetyZone.expires_at > datetime.now(timezone.utc),
-                    )
-                )
-            )
-            rows = result.mappings().all()
-            return [
-                {
-                    "id": f"safety_zone_{r['id']}",
-                    "safety_score": r["safety_score"],
-                    "source": r["source"],
-                    "geojson": r["geojson"],
-                }
-                for r in rows
-            ]
-    except SQLAlchemyError as exc:
-        logger.error(f"Error querying safety zones: {exc}")
-        return []
-
-
-async def get_active_closures(lat: float, lng: float, radius_m: float = 5000) -> list[dict]:
-    """Return active construction/closure zones within radius.
-
-    Filters out zones whose `end_time` is in the past.
-
-    Returns:
-        List of dicts: {id, closure_type, description, geojson_geom}
-    """
-    try:
-        now = datetime.now(timezone.utc)
-        async with async_session_maker() as session:
-            point = WKTElement(f"POINT({lng} {lat})", srid=4326)
-            result = await session.execute(
-                select(
-                    ClosureZone.id,
-                    ClosureZone.closure_type,
-                    ClosureZone.description,
-                    ClosureZone.source,
-                    ST_AsGeoJSON(ClosureZone.geom).label("geojson"),
-                ).where(
-                    and_(
-                        ClosureZone.geom.ST_DWithin(point, radius_m * DEG_PER_M),
-                        # Include closures with no end_time OR where end_time > now
-                        (ClosureZone.end_time == None) | (ClosureZone.end_time > now),
-                    )
-                )
-            )
-            rows = result.mappings().all()
-            return [
-                {
-                    "id": f"closure_zone_{r['id']}",
-                    "closure_type": r["closure_type"],
-                    "description": r["description"],
-                    "source": r["source"],
-                    "geojson": r["geojson"],
-                }
-                for r in rows
-            ]
-    except SQLAlchemyError as exc:
-        logger.error(f"Error querying closure zones: {exc}")
         return []

@@ -41,6 +41,9 @@ async def get_route(
     elevation: bool = True,
     details: list[str] | None = None,
     alternative_routes: int = 0,
+    algorithm: str | None = None,
+    round_trip_distance_m: float | None = None,
+    round_trip_seed: int = 0,
 ) -> dict[str, Any]:
     """Fetch a route from GraphHopper using a GET request.
 
@@ -74,9 +77,15 @@ async def get_route(
     for d in details:
         params.append(("details", d))
 
-    if alternative_routes > 1:
+    if algorithm:
+        params.append(("algorithm", algorithm))
+    elif alternative_routes > 1:
         params.append(("algorithm", "alternative_route"))
         params.append(("alternative_route.max_paths", str(alternative_routes)))
+
+    if algorithm == "round_trip" and round_trip_distance_m is not None:
+        params.append(("round_trip.distance", str(int(round_trip_distance_m))))
+        params.append(("round_trip.seed", str(round_trip_seed)))
 
     if settings.graphhopper_api_key:
         params.append(("key", settings.graphhopper_api_key))
@@ -96,6 +105,10 @@ async def post_route_with_custom_model(
     custom_model: dict[str, Any] | None = None,
     elevation: bool = True,
     details: list[str] | None = None,
+    algorithm: str | None = None,
+    round_trip_distance_m: float | None = None,
+    round_trip_seed: int = 0,
+    pass_through_indices: list[int] | None = None,
 ) -> dict[str, Any]:
     """Fetch a route using POST with a dynamic custom model override.
 
@@ -109,6 +122,9 @@ async def post_route_with_custom_model(
         custom_model: JSON custom model with speed/priority/areas overrides.
         elevation: Include 3D coordinates.
         details: Extra edge details.
+        pass_through_indices: Indices into the waypoints list that should be
+            treated as pass-through (U-turn allowed) waypoints. Used for
+            dead-end summit access.
 
     Returns:
         Parsed JSON response from GraphHopper.
@@ -116,8 +132,14 @@ async def post_route_with_custom_model(
     if details is None:
         details = ["average_slope"]
 
+    # Build points array — optionally tag specific indices as pass_through
+    points_list: list[Any] = []
+    for i, (lat, lng) in enumerate(waypoints):
+        pt: Any = [lng, lat]
+        points_list.append(pt)
+
     body: dict[str, Any] = {
-        "points": [[lng, lat] for lat, lng in waypoints],  # GH POST uses [lng, lat]
+        "points": points_list,
         "profile": profile,
         "elevation": elevation,
         "points_encoded": False,
@@ -126,6 +148,18 @@ async def post_route_with_custom_model(
         "calc_points": True,
         "details": details,
     }
+
+    # Inject pass_through flags for U-turn-capable waypoints
+    if pass_through_indices:
+        body["pass_through"] = [
+            (i in pass_through_indices) for i in range(len(waypoints))
+        ]
+
+    if algorithm:
+        body["algorithm"] = algorithm
+        if algorithm == "round_trip" and round_trip_distance_m is not None:
+            body["round_trip.distance"] = int(round_trip_distance_m)
+            body["round_trip.seed"] = round_trip_seed
 
     if custom_model:
         body["custom_model"] = custom_model
