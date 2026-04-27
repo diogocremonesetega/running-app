@@ -28,4 +28,4 @@ EXPOSE 8000
 
 # Command to run the application using uvicorn
 # We run `alembic upgrade head` first to ensure the PostGIS tables exist
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "if echo \"$DATABASE_URL\" | grep -q 'sqlite'; then echo 'Skipping migrations for SQLite dummy DB'; else alembic upgrade head; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
