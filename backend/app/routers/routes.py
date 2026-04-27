@@ -103,6 +103,12 @@ async def point_to_point_route(req: PointToPointRequest):
     }
     profile = "foot_no_signals" if req.avoid_traffic_signals else profile_map.get(req.elevation_preference, "foot_elevation")
 
+    # Public GraphHopper API only accepts [car, bike, foot].
+    # Custom profile names only work on self-hosted instances.
+    from app.config import settings
+    if settings.graphhopper_api_key:
+        profile = "foot"
+
     try:
         gh_response = await graphhopper.get_route(
             waypoints=[(req.start.lat, req.start.lng), (req.end.lat, req.end.lng)],
