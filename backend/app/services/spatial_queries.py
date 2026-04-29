@@ -115,8 +115,8 @@ async def get_active_safety_zones(lat: float, lng: float, radius_m: float = 5000
                 }
                 for r in rows
             ]
-    except SQLAlchemyError as exc:
-        logger.error(f"Error querying safety zones: {exc}")
+    except Exception as exc:
+        logger.error(f"Error querying safety zones ({type(exc).__name__}): {exc}")
         return []
 
 
@@ -158,8 +158,8 @@ async def get_active_closures(lat: float, lng: float, radius_m: float = 5000) ->
                 }
                 for r in rows
             ]
-    except SQLAlchemyError as exc:
-        logger.error(f"Error querying closure zones: {exc}")
+    except Exception as exc:
+        logger.error(f"Error querying closure zones ({type(exc).__name__}): {exc}")
         return []
 
 
@@ -196,6 +196,6 @@ async def get_scenic_segments_near(lat: float, lng: float, radius_m: float = 300
                 }
                 for r in rows
             ]
-    except SQLAlchemyError as exc:
-        logger.error(f"Error querying scenic segments: {exc}")
+    except Exception as exc:
+        logger.error(f"Error querying scenic segments ({type(exc).__name__}): {exc}")
         return []
