@@ -18,6 +18,7 @@ logging.basicConfig(
 )
 
 from app.routers import routes
+from app.routers import diagnostics
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ if os.path.isdir(static_dir):
 
 # Include routes
 app.include_router(routes.router)
+app.include_router(diagnostics.router)
 
 
 @app.get("/")
