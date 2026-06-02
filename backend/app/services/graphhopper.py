@@ -21,6 +21,19 @@ class GraphHopperError(Exception):
         super().__init__(f"GraphHopper error {status_code}: {detail}")
 
 
+_GH_UNAVAILABLE_MSG = (
+    "GraphHopper is not running on port 8989. "
+    "Run .\\start.ps1 (full stack) or .\\graphhopper\\start_graphhopper.ps1 from the repo root."
+)
+
+
+def _raise_if_unreachable(exc: Exception) -> None:
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+        raise GraphHopperError(503, _GH_UNAVAILABLE_MSG) from exc
+    if isinstance(exc, httpx.TimeoutException):
+        raise GraphHopperError(504, "GraphHopper request timed out.") from exc
+
+
 async def health_check() -> dict:
     """Check if GraphHopper is running and healthy.
 
@@ -90,8 +103,12 @@ async def get_route(
     if settings.graphhopper_api_key:
         params.append(("key", settings.graphhopper_api_key))
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(f"{settings.graphhopper_url}/route", params=params)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{settings.graphhopper_url}/route", params=params)
+    except httpx.HTTPError as exc:
+        _raise_if_unreachable(exc)
+        raise
 
     if resp.status_code != 200:
         raise GraphHopperError(resp.status_code, resp.text)
@@ -113,7 +130,7 @@ async def post_route_with_custom_model(
     """Fetch a route using POST with a dynamic custom model override.
 
     This allows injecting per-request priority/speed rules and geographic
-    area penalties (e.g., crime zones, construction zones) without
+    area penalties (e.g., unlit streets, hydration POIs) without
     rebuilding the routing graph.
 
     Args:
@@ -168,12 +185,16 @@ async def post_route_with_custom_model(
     if settings.graphhopper_api_key:
         params["key"] = settings.graphhopper_api_key
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            f"{settings.graphhopper_url}/route",
-            json=body,
-            params=params,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                f"{settings.graphhopper_url}/route",
+                json=body,
+                params=params,
+            )
+    except httpx.HTTPError as exc:
+        _raise_if_unreachable(exc)
+        raise
 
     if resp.status_code != 200:
         raise GraphHopperError(resp.status_code, resp.text)

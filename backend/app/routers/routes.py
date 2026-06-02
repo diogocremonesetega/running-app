@@ -15,7 +15,8 @@ from shapely.geometry import LineString
 
 from app.db import get_db
 from app.models.spatial import RouteHistory
-from app.services import route_generator, graphhopper, spatial_queries, weather_data
+from app.services import route_generator, graphhopper
+from app.services.route_generator import InfrastructureFlags
 
 logger = logging.getLogger(__name__)
 
@@ -29,62 +30,58 @@ class Coordinate(BaseModel):
     lng: float = Field(..., ge=-180, le=180, description="Longitude")
 
 
-class GenerateRouteRequest(BaseModel):
+class RouteInfrastructureFlags(BaseModel):
+    avoid_traffic_signals: bool = False
+    prioritize_well_lit_streets: bool = False
+    prioritize_soft_surfaces: bool = False
+    include_water: bool = False
+    include_restrooms: bool = False
+
+
+class GenerateRouteRequest(RouteInfrastructureFlags):
     start: Coordinate
     distance_km: float = Field(5.0, gt=0.5, le=50, description="Target distance in km")
     elevation_preference: Literal["flat", "moderate", "hilly"] = "moderate"
-    avoid_traffic_signals: bool = False
-    prioritize_safety: bool = False
-    avoid_unlit_streets: bool = False
-    prefer_scenic: bool = False
-    start_bearing: float = Field(
-        0.0, ge=0, lt=360,
-        description=(
-            "Route variety seed (0–359). Different values produce different organic "
-            "loop shapes from the same start point via GraphHopper's round_trip seed."
-        ),
-    )
 
 
-class PointToPointRequest(BaseModel):
+class PointToPointRequest(RouteInfrastructureFlags):
     """Simple point-to-point route (no loop)."""
     start: Coordinate
     end: Coordinate
     elevation_preference: Literal["flat", "moderate", "hilly"] = "moderate"
-    avoid_traffic_signals: bool = False
-    avoid_unlit_streets: bool = False
+
+
+def _to_infrastructure_flags(req: RouteInfrastructureFlags) -> InfrastructureFlags:
+    return InfrastructureFlags(
+        avoid_traffic_signals=req.avoid_traffic_signals,
+        prioritize_well_lit_streets=req.prioritize_well_lit_streets,
+        prioritize_soft_surfaces=req.prioritize_soft_surfaces,
+        include_water=req.include_water,
+        include_restrooms=req.include_restrooms,
+    )
 
 
 # --- Endpoints ---
 
 @router.post("/generate-route")
 async def generate_route(req: GenerateRouteRequest):
-    """Generate an organic loop running route via GraphHopper's native round_trip algorithm.
-
-    Returns the route GeoJSON, elevation profile, slope segments,
-    and summary statistics.
-    """
+    """Generate an organic loop running route via GraphHopper's round_trip algorithm."""
     try:
-        result = await route_generator.generate_loop_route(
+        return await route_generator.generate_loop_route(
             start_lat=req.start.lat,
             start_lng=req.start.lng,
             distance_km=req.distance_km,
             elevation_preference=req.elevation_preference,
             avoid_traffic_signals=req.avoid_traffic_signals,
-            prioritize_safety=req.prioritize_safety,
-            avoid_unlit_streets=req.avoid_unlit_streets,
-            prefer_scenic=req.prefer_scenic,
-            start_bearing=req.start_bearing,
+            prioritize_well_lit_streets=req.prioritize_well_lit_streets,
+            prioritize_soft_surfaces=req.prioritize_soft_surfaces,
+            include_water=req.include_water,
+            include_restrooms=req.include_restrooms,
         )
-        
-        # Append environmental conditions to the response
-        env_data = await weather_data.fetch_current_conditions(req.start.lat, req.start.lng)
-        result["environmental_conditions"] = env_data
-        
-        return result
     except graphhopper.GraphHopperError as e:
-        logger.exception("GraphHopper error during route generation")
-        raise HTTPException(status_code=502, detail=f"GraphHopper error: {e.detail}")
+        status = 503 if e.status_code == 503 else 502
+        logger.warning("GraphHopper error during route generation: %s", e.detail)
+        raise HTTPException(status_code=status, detail=e.detail)
     except Exception as e:
         logger.exception("Unhandled exception in generate_route")
         raise HTTPException(status_code=500, detail=str(e))
@@ -92,76 +89,24 @@ async def generate_route(req: GenerateRouteRequest):
 
 @router.post("/point-to-point")
 async def point_to_point_route(req: PointToPointRequest):
-    """Generate a simple point-to-point route with elevation data.
-
-    Useful for verifying elevation profiles and comparing profiles.
-    """
-    profile_map = {
-        "flat": "foot_flat_recovery",
-        "moderate": "foot_elevation",
-        "hilly": "foot_hill_training",
-    }
-    profile = "foot_no_signals" if req.avoid_traffic_signals else profile_map.get(req.elevation_preference, "foot_elevation")
-
-    # Public GraphHopper API only accepts [car, bike, foot].
-    # Custom profile names only work on self-hosted instances.
-    from app.config import settings
-    if settings.graphhopper_api_key:
-        profile = "foot"
-
+    """Generate a point-to-point route with elevation and infrastructure toggles."""
     try:
-        gh_response = await graphhopper.get_route(
-            waypoints=[(req.start.lat, req.start.lng), (req.end.lat, req.end.lng)],
-            profile=profile,
-            elevation=True,
-            details=["average_slope"],
+        return await route_generator.generate_point_to_point_route(
+            start_lat=req.start.lat,
+            start_lng=req.start.lng,
+            end_lat=req.end.lat,
+            end_lng=req.end.lng,
+            elevation_preference=req.elevation_preference,
+            flags=_to_infrastructure_flags(req),
         )
-
-        if not gh_response.get("paths"):
-            raise HTTPException(status_code=404, detail="No route found")
-
-        best_path = gh_response["paths"][0]
-        elevation_profile = graphhopper.extract_elevation_profile(best_path)
-        slope_segments = graphhopper.extract_slope_segments(best_path)
-
-        # Compute elevation stats
-        elevation_stats = {}
-        if elevation_profile:
-            elevations = [p["elevation_m"] for p in elevation_profile]
-            elevation_stats = {
-                "min_elevation_m": min(elevations),
-                "max_elevation_m": max(elevations),
-                "elevation_range_m": round(max(elevations) - min(elevations), 1),
-            }
-
-        return {
-            "route": {
-                "type": "Feature",
-                "geometry": best_path.get("points", {}),
-                "properties": {
-                    "distance_m": round(best_path.get("distance", 0), 1),
-                    "distance_km": round(best_path.get("distance", 0) / 1000, 2),
-                    "time_ms": best_path.get("time", 0),
-                    "time_min": round(best_path.get("time", 0) / 60000, 1),
-                    "ascend_m": round(best_path.get("ascend", 0), 1),
-                    "descend_m": round(best_path.get("descend", 0), 1),
-                    "profile_used": profile,
-                },
-            },
-            "elevation_profile": elevation_profile,
-            "elevation_stats": elevation_stats,
-            "slope_segments": slope_segments,
-        }
     except graphhopper.GraphHopperError as e:
-        raise HTTPException(status_code=502, detail=f"GraphHopper error: {e.detail}")
+        status = 503 if e.status_code == 503 else 502
+        raise HTTPException(status_code=status, detail=e.detail)
 
 
 @router.get("/geocode")
 async def geocode(q: str, limit: int = 5):
-    """Geocode an address/place name to coordinates using Nominatim.
-
-    Biased toward the Berkeley/Bay Area for best results.
-    """
+    """Geocode an address/place name to coordinates using Nominatim."""
     if not q or len(q.strip()) < 2:
         return {"results": []}
 
@@ -170,8 +115,8 @@ async def geocode(q: str, limit: int = 5):
         "format": "jsonv2",
         "limit": min(limit, 8),
         "addressdetails": 1,
-        "viewbox": "-122.35,37.95,-122.15,37.83",  # Berkeley/Oakland bounding box
-        "bounded": 0,  # Prefer but don't restrict to viewbox
+        "viewbox": "-122.35,37.95,-122.15,37.83",
+        "bounded": 0,
         "countrycodes": "us",
     }
 
@@ -229,7 +174,7 @@ async def reverse_geocode(lat: float, lng: float):
 
 @router.get("/profiles")
 async def list_profiles():
-    """List available routing profiles and their descriptions."""
+    """List available elevation routing profiles."""
     return {
         "profiles": [
             {
@@ -250,12 +195,6 @@ async def list_profiles():
                 "description": "Actively seeks elevation gain for challenging workouts",
                 "elevation_preference": "hilly",
             },
-            {
-                "id": "foot_no_signals",
-                "name": "No Traffic Signals",
-                "description": "Avoids signal-heavy roads, prefers greenways and paths",
-                "avoid_traffic_signals": True,
-            },
         ]
     }
 
@@ -268,87 +207,6 @@ async def health():
         "backend": "ok",
         "graphhopper": gh_status,
     }
-
-
-
-@router.get("/safety-overlay")
-async def safety_overlay(lat: float, lng: float, radius_m: float = 5000):
-    """Return current safety zones and road closures near a location as GeoJSON.
-
-    Frontend uses this to render hazard overlays on the map. Data is sourced
-    from PostGIS (populated by background workers every 30 minutes).
-    """
-    try:
-        safety_zones = await spatial_queries.get_active_safety_zones(lat, lng, radius_m)
-        closure_zones = await spatial_queries.get_active_closures(lat, lng, radius_m)
-        
-        import json as _json
-        features = []
-        for z in safety_zones:
-            features.append({
-                "type": "Feature",
-                "geometry": _json.loads(z["geojson"]),
-                "properties": {
-                    "zone_type": "safety",
-                    "source": z["source"],
-                    "safety_score": z["safety_score"],
-                }
-            })
-        for z in closure_zones:
-            features.append({
-                "type": "Feature",
-                "geometry": _json.loads(z["geojson"]),
-                "properties": {
-                    "zone_type": "closure",
-                    "source": z["source"],
-                    "closure_type": z["closure_type"],
-                    "description": z["description"],
-                }
-            })
-        
-        return {
-            "type": "FeatureCollection",
-            "features": features,
-            "meta": {
-                "safety_zone_count": len(safety_zones),
-                "closure_zone_count": len(closure_zones),
-                "radius_m": radius_m,
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/weather-advisory")
-async def weather_advisory(lat: float, lng: float):
-    """Return run comfort score, weather conditions, and optimal start bearing.
-
-    Comfort score:
-      80-100 → Excellent  🟢
-      60-79  → Good       🟡
-      40-59  → Fair       🟠
-       0-39  → Poor       🔴
-
-    `optimal_start_bearing` points INTO the wind so you finish with a tailwind.
-    """
-    try:
-        conditions = await weather_data.fetch_current_conditions(lat, lng)
-        return {
-            "comfort_score": conditions["comfort_score"],
-            "comfort_label": conditions["comfort_label"],
-            "temperature_c": conditions["temperature_c"],
-            "precipitation_mm": conditions["precipitation_mm"],
-            "wind_speed_kmh": conditions["wind_speed_kmh"],
-            "wind_direction_deg": conditions["wind_direction_deg"],
-            "us_aqi": conditions["us_aqi"],
-            "optimal_start_bearing": conditions["optimal_start_bearing"],
-            "warnings": {
-                "weather": conditions["weather_warning"],
-                "air_quality": conditions["aqi_warning"],
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- Run History ---
@@ -367,11 +225,7 @@ class RunSaveRequest(BaseModel):
 
 @router.post("/runs", status_code=201)
 async def save_run(payload: RunSaveRequest, db: AsyncSession = Depends(get_db)):
-    """Persist a completed live run to the route_history table.
-
-    Stores the GPS breadcrumb as a PostGIS LINESTRING alongside distance,
-    duration, elevation gain, and the routing profile that was used.
-    """
+    """Persist a completed live run to the route_history table."""
     if len(payload.coordinates) < 2:
         raise HTTPException(status_code=422, detail="A run must contain at least 2 GPS points.")
 
@@ -380,7 +234,6 @@ async def save_run(payload: RunSaveRequest, db: AsyncSession = Depends(get_db)):
     except ValueError:
         user_uuid = uuid.uuid4()
 
-    # Build a Shapely LineString from [lng, lat] pairs (PostGIS expects lon/lat order)
     line = LineString([(c[0], c[1]) for c in payload.coordinates])
 
     run = RouteHistory(

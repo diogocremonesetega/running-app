@@ -1,1 +1,1 @@
-from app.workers.data_ingest import start_background_workers
+"""Background workers (none active in v2)."""

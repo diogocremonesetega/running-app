@@ -1293,28 +1293,6 @@
         </div>
       </div>
 
-      <!-- Waypoints (Loop only) -->
-      <div class="control-group loop-controls" id="waypointsGroup">
-        <label>Waypoints</label>
-        <input type="number" id="numWaypoints" value="5" min="3" max="12" step="1">
-      </div>
-
-      <!-- Direction (Loop only) -->
-      <div class="control-group loop-controls" id="directionGroup">
-        <label>Route Direction</label>
-        <div class="compass">
-          <button class="compass-btn" data-dir="NW" data-bearing="315" onclick="selectDirection(this)">NW</button>
-          <button class="compass-btn selected" data-dir="N" data-bearing="0" onclick="selectDirection(this)">N</button>
-          <button class="compass-btn" data-dir="NE" data-bearing="45" onclick="selectDirection(this)">NE</button>
-          <button class="compass-btn" data-dir="W" data-bearing="270" onclick="selectDirection(this)">W</button>
-          <button class="compass-btn center">🧭</button>
-          <button class="compass-btn" data-dir="E" data-bearing="90" onclick="selectDirection(this)">E</button>
-          <button class="compass-btn" data-dir="SW" data-bearing="225" onclick="selectDirection(this)">SW</button>
-          <button class="compass-btn" data-dir="S" data-bearing="180" onclick="selectDirection(this)">S</button>
-          <button class="compass-btn" data-dir="SE" data-bearing="135" onclick="selectDirection(this)">SE</button>
-        </div>
-      </div>
-
       <div class="control-group">
         <label>Elevation Profile</label>
         <div class="profile-cards">
@@ -1339,80 +1317,25 @@
           <div class="toggle" id="toggleSignals" onclick="toggleSwitch(this, 'signals')"></div>
         </div>
         <div class="toggle-group" style="margin-top: 8px;">
-          <label>Prioritize Safety (Avoid Danger Zones)</label>
-          <div class="toggle" id="toggleSafety" onclick="toggleSwitch(this, 'safety')"></div>
+          <label>Prioritize Well-Lit Streets (Night Run)</label>
+          <div class="toggle" id="toggleWellLit" onclick="toggleSwitch(this, 'wellLit')"></div>
         </div>
         <div class="toggle-group" style="margin-top: 8px;">
-          <label>Avoid Unlit Streets (Night Run)</label>
-          <div class="toggle" id="toggleUnlit" onclick="toggleSwitch(this, 'unlit')"></div>
+          <label>Prioritize Soft Surfaces (Track/Trail)</label>
+          <div class="toggle" id="toggleSoftSurfaces" onclick="toggleSwitch(this, 'softSurfaces')"></div>
         </div>
         <div class="toggle-group" style="margin-top: 8px;">
-          <label>Prefer Scenic Routes (Parks & Trails)</label>
-          <div class="toggle" id="toggleScenic" onclick="toggleSwitch(this, 'scenic')"></div>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label style="margin-bottom: 2px;">Map Overlays</label>
-        <div class="toggle-group">
-          <label>Show Crime Heatmap</label>
-          <div class="toggle active" id="toggleHeatmapOverlay" onclick="toggleOverlay(this, 'heatmap')"></div>
+          <label>Include Water (Hydration)</label>
+          <div class="toggle" id="toggleWater" onclick="toggleSwitch(this, 'water')"></div>
         </div>
         <div class="toggle-group" style="margin-top: 8px;">
-          <label>Show Traffic Lights</label>
-          <div class="toggle active" id="toggleSignalsOverlay" onclick="toggleOverlay(this, 'signals')"></div>
-        </div>
-      </div>
-
-      <!-- Smart Training Mode -->
-      <div class="control-group loop-controls" id="trainingModeGroup">
-        <label class="training-mode-label">⚡ Smart Training Mode</label>
-        <div class="training-grid">
-          <div class="training-card easy" onclick="selectTrainingMode(this, 'easy')">
-            <div class="tc-icon">🌊</div>
-            <div class="tc-name">Easy</div>
-            <div class="tc-hint">Flat · Scenic · Recovery</div>
-          </div>
-          <div class="training-card base" onclick="selectTrainingMode(this, 'base')">
-            <div class="tc-icon">🏃</div>
-            <div class="tc-name">Base Build</div>
-            <div class="tc-hint">Balanced · Scenic · Steady</div>
-          </div>
-          <div class="training-card tempo" onclick="selectTrainingMode(this, 'tempo')">
-            <div class="tc-icon">⚡</div>
-            <div class="tc-name">Tempo</div>
-            <div class="tc-hint">Moderate · No Signals · Fast</div>
-          </div>
-          <div class="training-card hills" onclick="selectTrainingMode(this, 'hills')">
-            <div class="tc-icon">🔺</div>
-            <div class="tc-name">Hill Training</div>
-            <div class="tc-hint">Hilly · Climb-focused</div>
-          </div>
-        </div>
-        <div class="training-advisory" id="trainingAdvisory"></div>
-      </div>
-
-      <div class="control-group" id="weatherWidget"
-        style="display: none; padding: 10px; background: rgba(74, 144, 217, 0.08); border-radius: 8px; border: 1px solid var(--border); margin-top: 4px; margin-bottom: 8px;">
-        <label style="margin-bottom: 4px;">Weather & Air Quality</label>
-        <div style="font-size: 13px; color: var(--text-primary); display: flex; justify-content: space-between; flex-wrap:wrap; gap:4px;">
-          <span>🌡️ <span id="weatherTemp">—</span></span>
-          <span>💨 AQI: <span id="weatherAqi">—</span></span>
-          <span>🌤️ Comfort: <span id="weatherComfort">—</span></span>
-        </div>
-        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
-          💨 Wind: <span id="weatherWind">—</span> &nbsp;|  🧭 Best bearing: <span id="weatherBearing">—</span>°
-        </div>
-        <div id="weatherWarning" style="color: var(--accent-orange); font-size: 11px; margin-top: 6px; display: none;">
+          <label>Include Restrooms</label>
+          <div class="toggle" id="toggleRestrooms" onclick="toggleSwitch(this, 'restrooms')"></div>
         </div>
       </div>
 
       <button class="btn btn-primary" id="generateBtn" onclick="generateRoute()">
         Generate Route
-      </button>
-
-      <button class="btn btn-secondary loop-controls" onclick="compareProfiles()">
-        Compare All Profiles
       </button>
 
       <!-- Live Run Tracking Controls -->
@@ -1450,10 +1373,6 @@
         <div class="stat">
           <span class="label">Elev. Range</span>
           <span class="value" id="statRange">—<span class="unit"> m</span></span>
-        </div>
-        <div class="stat" id="statScores" style="display:none; min-width:210px;">
-          <span class="label">Route Scores</span>
-          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;" id="scoreBadges"></div>
         </div>
       </div>
 
@@ -1566,27 +1485,19 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <!-- Leaflet Heatmap -->
-  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-
   <script>
     // ========== State ==========
     const API_BASE = '';
     let selectedProfile = 'moderate';
     let avoidSignals = false;
-    let prioritizeSafety = false;
-    let avoidUnlitStreets = false;
-    let preferScenic = false;
-    let activeTrainingMode = null;
-    let currentWeatherData = null;
+    let prioritizeWellLit = false;
+    let prioritizeSoftSurfaces = false;
+    let includeWater = false;
+    let includeRestrooms = false;
+    let graphHopperReady = false;
     let currentRouteData = null;
     let routeLayerGroup = null;
-    let signalLayerGroup = null;
-    let heatmapOverlay = null;
-    let showHeatmapOverlay = true;
-    let showSignalsOverlay = true;
     let elevationMarker = null;
-    let selectedBearing = 0;
     let currentUnit = 'km'; // 'km' or 'mi'
     let routeMode = 'loop'; // 'loop' or 'p2p'
     const KM_TO_MI = 0.621371;
@@ -1633,23 +1544,50 @@
     routeLayerGroup = L.layerGroup().addTo(map);
 
     // ========== Connection check ==========
+    function parseApiError(errBody) {
+      if (!errBody) return 'Unknown error';
+      const d = errBody.detail;
+      if (typeof d === 'string') return d;
+      if (Array.isArray(d)) return d.map(x => x.msg || JSON.stringify(x)).join('; ');
+      return errBody.error || JSON.stringify(errBody);
+    }
+
+    function handleRouteResponse(data) {
+      if (data.error) {
+        throw new Error(data.warning || data.error);
+      }
+      if (!data.route?.geometry) {
+        throw new Error('No route geometry returned from the server.');
+      }
+      currentRouteData = data;
+      document.getElementById('btnStartRun').disabled = false;
+      updateStats(data);
+      drawRouteOnMap(data);
+      drawElevationChart(data);
+      const props = data.route?.properties;
+      log(`Route generated: ${props?.distance_km} km, ↑${props?.ascend_m}m, ↓${props?.descend_m}m [${props?.profile_used}]`, 'success');
+    }
+
     async function checkConnection() {
       try {
         const resp = await fetch(`${API_BASE}/api/v1/health`);
         const data = await resp.json();
         const dot = document.getElementById('statusDot');
         const text = document.getElementById('statusText');
-        if (data.graphhopper?.status === 'ok') {
+        graphHopperReady = data.graphhopper?.status === 'ok';
+        if (graphHopperReady) {
           dot.classList.add('connected');
           text.textContent = 'GraphHopper connected';
           log('Connected to GraphHopper ✓', 'success');
         } else {
-          text.textContent = 'GraphHopper unavailable';
-          log('GraphHopper not reachable', 'error');
+          dot.classList.remove('connected');
+          text.textContent = 'GraphHopper unavailable — start routing engine';
+          log('GraphHopper not reachable on :8989. Run .\\start.ps1 or .\\graphhopper\\start_graphhopper.ps1', 'error');
         }
       } catch (e) {
+        graphHopperReady = false;
         document.getElementById('statusText').textContent = 'Backend unavailable';
-        log('Backend not reachable — start it with uvicorn', 'error');
+        log('Backend not reachable — run .\\start-backend.ps1', 'error');
       }
     }
 
@@ -1662,34 +1600,22 @@
 
     function toggleSwitch(el, type) {
       el.classList.toggle('active');
-      if (type === 'signals') avoidSignals = el.classList.contains('active');
-      if (type === 'safety') prioritizeSafety = el.classList.contains('active');
-      if (type === 'unlit') avoidUnlitStreets = el.classList.contains('active');
-      if (type === 'scenic') preferScenic = el.classList.contains('active');
+      const on = el.classList.contains('active');
+      if (type === 'signals') avoidSignals = on;
+      if (type === 'wellLit') prioritizeWellLit = on;
+      if (type === 'softSurfaces') prioritizeSoftSurfaces = on;
+      if (type === 'water') includeWater = on;
+      if (type === 'restrooms') includeRestrooms = on;
     }
 
-    function toggleOverlay(el, type) {
-      el.classList.toggle('active');
-      const isActive = el.classList.contains('active');
-      if (type === 'heatmap') {
-        showHeatmapOverlay = isActive;
-        if (heatmapOverlay) {
-          if (isActive) map.addLayer(heatmapOverlay);
-          else map.removeLayer(heatmapOverlay);
-        }
-      } else if (type === 'signals') {
-        showSignalsOverlay = isActive;
-        if (signalLayerGroup) {
-          if (isActive) map.addLayer(signalLayerGroup);
-          else map.removeLayer(signalLayerGroup);
-        }
-      }
-    }
-
-    function selectDirection(el) {
-      document.querySelectorAll('.compass-btn').forEach(b => b.classList.remove('selected'));
-      el.classList.add('selected');
-      selectedBearing = parseInt(el.dataset.bearing);
+    function infrastructurePayload() {
+      return {
+        avoid_traffic_signals: avoidSignals,
+        prioritize_well_lit_streets: prioritizeWellLit,
+        prioritize_soft_surfaces: prioritizeSoftSurfaces,
+        include_water: includeWater,
+        include_restrooms: includeRestrooms,
+      };
     }
 
     function selectUnit(unit) {
@@ -1735,160 +1661,6 @@
         const targetVal = currentUnit === 'km' ? parseFloat(b.dataset.km) : parseFloat(b.dataset.mi);
         b.classList.toggle('selected', Math.abs(val - targetVal) < 0.1);
       });
-    }
-
-    // ========== Smart Training Mode ==========
-    const TRAINING_CONFIGS = {
-      easy: {
-        profile: 'flat',
-        avoidSignals: true,
-        prioritizeSafety: true,
-        avoidUnlit: false,
-        preferScenic: true,
-        distanceKm: 5.0,
-        presetKm: 5,
-      },
-      base: {
-        profile: 'moderate',
-        avoidSignals: false,
-        prioritizeSafety: false,
-        avoidUnlit: false,
-        preferScenic: true,
-        distanceKm: 8.0,
-        presetKm: 10,
-      },
-      tempo: {
-        profile: 'moderate',
-        avoidSignals: true,
-        prioritizeSafety: true,
-        avoidUnlit: false,
-        preferScenic: false,
-        distanceKm: 8.0,
-        presetKm: 10,
-      },
-      hills: {
-        profile: 'hilly',
-        avoidSignals: true,
-        prioritizeSafety: false,
-        avoidUnlit: false,
-        preferScenic: true,
-        distanceKm: 10.0,
-        presetKm: 10,
-      },
-    };
-
-    function selectTrainingMode(el, mode) {
-      // Deselect if same card tapped again
-      if (activeTrainingMode === mode) {
-        el.classList.remove('selected');
-        activeTrainingMode = null;
-        document.getElementById('trainingAdvisory').style.display = 'none';
-        return;
-      }
-
-      activeTrainingMode = mode;
-      document.querySelectorAll('.training-card').forEach(c => c.classList.remove('selected'));
-      el.classList.add('selected');
-
-      const cfg = TRAINING_CONFIGS[mode];
-
-      // Apply elevation profile
-      document.querySelectorAll('.profile-card').forEach(c => {
-        c.classList.toggle('selected', c.dataset.profile === cfg.profile);
-      });
-      selectedProfile = cfg.profile;
-
-      // Apply toggles
-      _applyToggle('toggleSignals', cfg.avoidSignals);  avoidSignals = cfg.avoidSignals;
-      _applyToggle('toggleSafety',  cfg.prioritizeSafety); prioritizeSafety = cfg.prioritizeSafety;
-      _applyToggle('toggleUnlit',   cfg.avoidUnlit);   avoidUnlitStreets = cfg.avoidUnlit;
-      _applyToggle('toggleScenic',  cfg.preferScenic); preferScenic = cfg.preferScenic;
-
-      // Apply distance
-      const distInput = document.getElementById('distanceInput');
-      const km = cfg.distanceKm;
-      distInput.value = currentUnit === 'km' ? km.toFixed(1) : (km * 0.621371).toFixed(1);
-      updatePresetSelection();
-
-      // Show condition-aware advisory
-      _updateTrainingAdvisory(mode);
-    }
-
-    function _applyToggle(id, active) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (active) el.classList.add('active');
-      else el.classList.remove('active');
-    }
-
-    function _updateTrainingAdvisory(mode) {
-      const advisory = document.getElementById('trainingAdvisory');
-      if (!advisory) return;
-
-      const labels = { easy: 'Easy Recovery', base: 'Base Build', tempo: 'Tempo', hills: 'Hill Training' };
-      const icons  = { easy: '🌊', base: '🏃', tempo: '⚡', hills: '🔺' };
-
-      let statusClass = 'good';
-      let msg = '';
-
-      if (currentWeatherData) {
-        const comfort = currentWeatherData.comfort_score ?? 100;
-        const aqi     = currentWeatherData.aqi ?? 0;
-        const tempC   = currentWeatherData.temperature_c;
-        const tempStr = tempC != null
-          ? (currentUnit === 'km' ? `${tempC}°C` : `${Math.round(tempC * 9/5 + 32)}°F`)
-          : '';
-
-        const badAqi     = aqi > 100;
-        const lowComfort = comfort < 40;
-        const hotDay     = tempC != null && tempC > 30;
-        const coldDay    = tempC != null && tempC < 5;
-
-        if (mode === 'easy') {
-          if (badAqi) {
-            statusClass = 'caution';
-            msg = `⚠️ AQI ${aqi} — even easy runs can irritate lungs. Consider masking up.`;
-          } else {
-            msg = `✅ Good conditions for recovery ${tempStr ? `(${tempStr})` : ''}. Flat + scenic route auto-configured.`;
-          }
-        } else if (mode === 'base') {
-          if (badAqi || hotDay) {
-            statusClass = 'caution';
-            msg = `⚠️ ${hotDay ? `Hot (${tempStr})` : `AQI ${aqi}`} — reduce pace or switch to Easy.`;
-          } else {
-            msg = `✅ Solid base-build day ${tempStr ? `· ${tempStr}` : ''}. Balanced route with scenic boost ready.`;
-          }
-        } else if (mode === 'tempo') {
-          if (badAqi || hotDay || coldDay) {
-            statusClass = 'warning';
-            msg = `🔴 ${hotDay ? `Heat (${tempStr})` : badAqi ? `AQI ${aqi}` : `Cold (${tempStr})`} — hard efforts in these conditions carry risk. Consider Easy instead.`;
-          } else if (lowComfort) {
-            statusClass = 'caution';
-            msg = `⚠️ Comfort score ${comfort}/100 — wind or humidity may affect your pace target.`;
-          } else {
-            msg = `✅ Great conditions for tempo ${tempStr ? `· ${tempStr}` : ''}. Route avoids signals for uninterrupted effort.`;
-          }
-        } else if (mode === 'hills') {
-          if (badAqi || hotDay) {
-            statusClass = 'warning';
-            msg = `🔴 ${hotDay ? `Heat (${tempStr})` : `AQI ${aqi}`} — hill efforts spike HR fast. Switch to Base Build today.`;
-          } else {
-            msg = `✅ Good for climbing ${tempStr ? `· ${tempStr}` : ''}. Hill profile + scenic trails auto-configured.`;
-          }
-        }
-      } else {
-        const tips = {
-          easy:  'Flat + scenic + safe routing auto-configured. Great for active recovery.',
-          base:  'Balanced elevation + scenic boost. Steady aerobic build.',
-          tempo: 'Moderate route + no signals for uninterrupted effort.',
-          hills: 'Hilly profile to maximize elevation gain. Signals avoided.',
-        };
-        msg = `${icons[mode]} ${labels[mode]}: ${tips[mode]}`;
-      }
-
-      advisory.textContent = msg;
-      advisory.className = `training-advisory ${statusClass}`;
-      advisory.style.display = 'block';
     }
 
     // ========== Route mode toggle ==========
@@ -2042,6 +1814,13 @@
         return generatePointToPoint();
       }
 
+      if (!graphHopperReady) {
+        log('Cannot generate route: GraphHopper is not running. Start it with .\\start.ps1 or .\\graphhopper\\start_graphhopper.ps1', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Route';
+        return;
+      }
+
       log('Requesting loop route...', 'info');
 
       // Convert input distance to km for the API
@@ -2055,54 +1834,23 @@
         start: { lat: startLat, lng: startLng },
         distance_km: distVal,
         elevation_preference: selectedProfile,
-        avoid_traffic_signals: avoidSignals,
-        prioritize_safety: prioritizeSafety,
-        avoid_unlit_streets: avoidUnlitStreets,
-        prefer_scenic: preferScenic,
-        num_waypoints: parseInt(document.getElementById('numWaypoints').value),
-        start_bearing: selectedBearing,
+        ...infrastructurePayload(),
       };
 
       try {
-        // Fetch route + weather advisory in parallel
-        const [routeResp, weatherResp] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/generate-route`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          }),
-          fetch(`${API_BASE}/api/v1/weather-advisory?lat=${startLat}&lng=${startLng}`)
-        ]);
+        const routeResp = await fetch(`${API_BASE}/api/v1/generate-route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
 
         if (!routeResp.ok) {
           const err = await routeResp.json();
-          throw new Error(err.detail || `HTTP ${routeResp.status}`);
+          throw new Error(parseApiError(err));
         }
 
         const data = await routeResp.json();
-        currentRouteData = data;
-
-        // Attach weather data to route data for updateStats()
-        if (weatherResp.ok) {
-          const wx = await weatherResp.json();
-          data.weather_advisory = wx;
-          currentWeatherData = {
-            comfort_score: wx.comfort_score,
-            aqi: wx.us_aqi,
-            temperature_c: wx.temperature_c,
-          };
-          // Refresh training advisory if a mode is active
-          if (activeTrainingMode) _updateTrainingAdvisory(activeTrainingMode);
-        }
-
-        document.getElementById('btnStartRun').disabled = false;
-
-        updateStats(data);
-        drawRouteOnMap(data);
-        drawElevationChart(data);
-
-        const props = data.route?.properties;
-        log(`Route generated: ${props?.distance_km} km, ↑${props?.ascend_m}m, ↓${props?.descend_m}m [${props?.profile_used}]`, 'success');
+        handleRouteResponse(data);
       } catch (e) {
         log(`Error: ${e.message}`, 'error');
       } finally {
@@ -2116,6 +1864,13 @@
       const btn = document.getElementById('generateBtn');
       const endLat = parseFloat(document.getElementById('endLat').value);
       const endLng = parseFloat(document.getElementById('endLng').value);
+
+      if (!graphHopperReady) {
+        log('Cannot generate route: GraphHopper is not running. Start it with .\\start.ps1 or .\\graphhopper\\start_graphhopper.ps1', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Route';
+        return;
+      }
 
       if (!endLat || !endLng) {
         log('Error: Please select an end destination', 'error');
@@ -2136,9 +1891,7 @@
           lng: endLng,
         },
         elevation_preference: selectedProfile,
-        avoid_traffic_signals: avoidSignals,
-        prioritize_safety: prioritizeSafety,
-        avoid_unlit_streets: avoidUnlitStreets,
+        ...infrastructurePayload(),
       };
 
       try {
@@ -2150,65 +1903,17 @@
 
         if (!resp.ok) {
           const err = await resp.json();
-          throw new Error(err.detail || `HTTP ${resp.status}`);
+          throw new Error(parseApiError(err));
         }
 
         const data = await resp.json();
-        currentRouteData = data;
-
-        document.getElementById('btnStartRun').disabled = false;
-
-        updateStats(data);
-        drawRouteOnMap(data);
-        drawElevationChart(data);
-
-        const props = data.route?.properties;
-        log(`Route generated: ${props?.distance_km} km, ↑${props?.ascend_m}m, ↓${props?.descend_m}m [${props?.profile_used}]`, 'success');
+        handleRouteResponse(data);
       } catch (e) {
         log(`Error: ${e.message}`, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Generate Route';
       }
-    }
-
-    // ========== Compare profiles ==========
-    async function compareProfiles() {
-      log('Comparing all profiles...', 'info');
-      const profiles = ['flat', 'moderate', 'hilly'];
-
-      for (const prof of profiles) {
-        let distVal = parseFloat(document.getElementById('distanceInput').value);
-        if (currentUnit === 'mi') distVal = distVal * MI_TO_KM;
-
-        const body = {
-          start: {
-            lat: parseFloat(document.getElementById('startLat').value),
-            lng: parseFloat(document.getElementById('startLng').value),
-          },
-          distance_km: distVal,
-          elevation_preference: prof,
-          avoid_traffic_signals: avoidSignals,
-          prioritize_safety: prioritizeSafety,
-          prefer_scenic: preferScenic,
-          num_waypoints: parseInt(document.getElementById('numWaypoints').value),
-          start_bearing: selectedBearing,
-        };
-
-        try {
-          const resp = await fetch(`${API_BASE}/api/v1/generate-route`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const data = await resp.json();
-          const p = data.route?.properties;
-          log(`  ${prof}: ↑${p?.ascend_m}m  ↓${p?.descend_m}m  ${p?.distance_km}km`, 'info');
-        } catch (e) {
-          log(`  ${prof}: error — ${e.message}`, 'error');
-        }
-      }
-      log('Profile comparison complete ✓', 'success');
     }
 
     // ========== Update stats ==========
@@ -2241,61 +1946,6 @@
       document.getElementById('statDescend').innerHTML = `${descend ?? '—'}<span class="unit"> ${elevUnit}</span>`;
       document.getElementById('statTime').innerHTML = `${p.time_min ?? '—'}<span class="unit"> min</span>`;
       document.getElementById('statRange').innerHTML = `${range ?? '—'}<span class="unit"> ${elevUnit}</span>`;
-
-      // Update Weather Widget from weather_advisory (fetched in parallel)
-      const env = data.weather_advisory || data.environmental_conditions;
-      if (env) {
-        document.getElementById('weatherWidget').style.display = 'block';
-        // Temperature
-        if (env.temperature_c != null) {
-          let temp = env.temperature_c;
-          let tempUnit = '°C';
-          if (currentUnit === 'mi') { temp = (temp * 9 / 5) + 32; tempUnit = '°F'; }
-          document.getElementById('weatherTemp').textContent = `${Math.round(temp)}${tempUnit}`;
-        } else {
-          document.getElementById('weatherTemp').textContent = '—';
-        }
-        // AQI
-        document.getElementById('weatherAqi').textContent = env.us_aqi ?? '—';
-        // Comfort score
-        const comfort = env.comfort_score;
-        const comfortLabel = env.comfort_label || '';
-        const comfortColor = comfort >= 80 ? '#34d399' : comfort >= 60 ? '#f59e0b' : comfort >= 40 ? '#f97316' : '#ef4444';
-        document.getElementById('weatherComfort').innerHTML = `<span style="color:${comfortColor};font-weight:700">${comfort ?? '—'}/100 ${comfortLabel}</span>`;
-        // Wind
-        const windDir = env.wind_direction_deg ?? '—';
-        const windSpd = env.wind_speed_kmh != null ? `${Math.round(env.wind_speed_kmh)} km/h` : '—';
-        document.getElementById('weatherWind').textContent = `${windSpd} from ${windDir}°`;
-        document.getElementById('weatherBearing').textContent = env.optimal_start_bearing != null ? Math.round(env.optimal_start_bearing) : '—';
-        // Warnings
-        const warnEl = document.getElementById('weatherWarning');
-        const warns = [];
-        if (env.warnings?.air_quality || env.aqi_warning) warns.push(`⚠️ Poor Air Quality (AQI: ${env.us_aqi})`);
-        if (env.warnings?.weather || env.weather_warning) warns.push('⚠️ Extreme Weather or Heavy Precipitation');
-        if (warns.length) { warnEl.style.display = 'block'; warnEl.textContent = warns.join(' | '); }
-        else { warnEl.style.display = 'none'; }
-      }
-
-      // Route Score Badges
-      const props = data.route?.properties || {};
-      const scores = [];
-      if (props.safety_score != null) scores.push({ label: '🛡️ Safety', val: props.safety_score, max: 100 });
-      if (props.scenic_score != null) scores.push({ label: '🌿 Scenic', val: props.scenic_score, max: 100 });
-      // Derive a simple route quality score from comfort + ascent smoothness
-      if (env?.comfort_score != null) scores.push({ label: '☀️ Comfort', val: env.comfort_score, max: 100 });
-      const scoreBadgesEl = document.getElementById('scoreBadges');
-      const scoreStatEl = document.getElementById('statScores');
-      if (scores.length > 0) {
-        scoreStatEl.style.display = 'flex';
-        scoreBadgesEl.innerHTML = scores.map(s => {
-          const pct = Math.round(s.val);
-          const color = pct >= 75 ? '#34d399' : pct >= 50 ? '#f59e0b' : '#ef4444';
-          return `<span style="background:rgba(255,255,255,0.06);border:1px solid ${color}33;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;color:${color}">${s.label} ${pct}</span>`;
-        }).join('');
-      } else {
-        // Always show comfort score as a minimum
-        scoreStatEl.style.display = 'none';
-      }
     }
 
     // ========== Draw route on Leaflet map ==========
@@ -2388,50 +2038,6 @@
       // Fit bounds with padding
       const bounds = L.latLngBounds(fullLatLngs);
       map.fitBounds(bounds, { padding: [40, 40] });
-
-      // Fetch and display traffic signals
-      fetchTrafficSignals(bounds);
-    }
-
-    async function fetchTrafficSignals(bounds) {
-      if (!signalLayerGroup) {
-        signalLayerGroup = L.layerGroup();
-      }
-
-      if (showSignalsOverlay) {
-        map.addLayer(signalLayerGroup);
-      } else {
-        map.removeLayer(signalLayerGroup);
-      }
-
-      signalLayerGroup.clearLayers();
-
-      const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
-      const query = `[out:json][timeout:5];node["highway"="traffic_signals"](${bbox});out body;`;
-      try {
-        const resp = await fetch(`https://overpass-api.de/api/interpreter`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: `data=${encodeURIComponent(query)}`
-        });
-        const data = await resp.json();
-        data.elements.forEach(node => {
-          const marker = L.circleMarker([node.lat, node.lon], {
-            radius: 4,
-            fillColor: '#f59e0b', // Accent orange
-            fillOpacity: 1,
-            color: '#fff',
-            weight: 1
-          });
-          marker.bindPopup('🚦 Traffic Signal');
-          signalLayerGroup.addLayer(marker);
-        });
-        log(`Loaded ${data.elements.length} traffic signals in area.`, 'info');
-      } catch (e) {
-        log('Could not load traffic signals.', 'error');
-      }
     }
 
     // ========== Highlight point on map from chart hover ==========
@@ -2635,47 +2241,6 @@
       setupSearch('endSearch', 'endDropdown', 'endCoords', 'endLat', 'endLng', (lat, lng) => {
         endCoord = { lat, lng };
       });
-
-      // Fetch safety zones from PostGIS and draw heatmap
-      try {
-        const { lat, lng } = startCoord;
-        const resp = await fetch(`${API_BASE}/api/v1/safety-overlay?lat=${lat}&lng=${lng}&radius_m=5000`);
-        const data = await resp.json();
-
-        // Convert GeoJSON polygon features → heatmap centroid points
-        if (data.features && data.features.length > 0 && L.heatLayer) {
-          const heatPoints = [];
-          data.features.forEach(f => {
-            if (f.properties.zone_type !== 'safety') return;
-            const score = f.properties.safety_score ?? 50;
-            // Low safety score = high danger weight
-            const weight = Math.max(0.1, (100 - score) / 100);
-            const geom = f.geometry;
-            // Use centroid of polygon ring
-            if (geom.type === 'Polygon' && geom.coordinates[0]) {
-              const ring = geom.coordinates[0];
-              const cLng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
-              const cLat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
-              heatPoints.push([cLat, cLng, weight]);
-            }
-          });
-          heatmapOverlay = L.heatLayer(heatPoints, {
-            radius: 40,
-            blur: 25,
-            maxZoom: 16,
-            max: 1.0,
-            minOpacity: 0.25,
-            gradient: { 0.3: '#f59e0b', 0.6: '#f97316', 1.0: '#ef4444' }
-          });
-          if (showHeatmapOverlay) heatmapOverlay.addTo(map);
-          log(`Crime heatmap: ${heatPoints.length} zones loaded.`, 'success');
-        } else {
-          log('No safety zones found near start location.', 'info');
-        }
-      } catch (e) {
-        log('Failed to load safety overlay', 'error');
-        console.error(e);
-      }
 
       // Force Leaflet to recalculate tile positions
       setTimeout(() => map.invalidateSize(), 200);

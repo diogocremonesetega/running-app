@@ -120,8 +120,10 @@ def main():
         "distance_km": 5.0,
         "elevation_preference": "moderate",
         "avoid_traffic_signals": False,
-        "num_waypoints": 5,
-        "start_bearing": 0.0,
+        "prioritize_well_lit_streets": False,
+        "prioritize_soft_surfaces": False,
+        "include_water": False,
+        "include_restrooms": False,
     })
 
     has_route = "route" in loop_result and "geometry" in loop_result.get("route", {})
@@ -155,8 +157,8 @@ def main():
         has_stats = "elevation_stats" in loop_result
         test("Elevation stats computed", has_stats)
 
-        has_waypoints = len(loop_result.get("waypoints_generated", [])) == 5
-        test("5 circle waypoints generated", has_waypoints)
+        has_waypoints = len(loop_result.get("waypoints_generated", [])) >= 1
+        test("Start waypoint metadata returned", has_waypoints)
 
     # --- 5. Profile Comparison ---
     print("\n📊 5. Elevation Profile Comparison (flat vs moderate vs hilly)")
@@ -167,8 +169,10 @@ def main():
             "distance_km": 5.0,
             "elevation_preference": pref,
             "avoid_traffic_signals": False,
-            "num_waypoints": 5,
-            "start_bearing": 0.0,
+            "prioritize_well_lit_streets": False,
+            "prioritize_soft_surfaces": False,
+            "include_water": False,
+            "include_restrooms": False,
         })
         if "route" in result:
             a = result["route"]["properties"].get("ascend_m", 0)
@@ -187,35 +191,36 @@ def main():
 
     # --- 6. Traffic Signal Avoidance ---
     print("\n🚦 6. Traffic Signal Avoidance")
+    infra_off = {
+        "prioritize_well_lit_streets": False,
+        "prioritize_soft_surfaces": False,
+        "include_water": False,
+        "include_restrooms": False,
+    }
     normal = api_post(f"{API_BASE}/api/v1/generate-route", {
         "start": {"lat": START_LAT, "lng": START_LNG},
         "distance_km": 5.0,
         "elevation_preference": "moderate",
         "avoid_traffic_signals": False,
-        "num_waypoints": 5,
-        "start_bearing": 45.0,
+        **infra_off,
     })
     avoid = api_post(f"{API_BASE}/api/v1/generate-route", {
         "start": {"lat": START_LAT, "lng": START_LNG},
         "distance_km": 5.0,
         "elevation_preference": "moderate",
         "avoid_traffic_signals": True,
-        "num_waypoints": 5,
-        "start_bearing": 45.0,
+        **infra_off,
     })
 
     if "route" in normal and "route" in avoid:
         normal_dist = normal["route"]["properties"]["distance_km"]
         avoid_dist = avoid["route"]["properties"]["distance_km"]
-        normal_profile = normal["route"]["properties"]["profile_used"]
-        avoid_profile = avoid["route"]["properties"]["profile_used"]
+        normal_flags = normal["route"]["properties"].get("avoid_traffic_signals")
+        avoid_flags = avoid["route"]["properties"].get("avoid_traffic_signals")
 
-        test("Different profiles used",
-             normal_profile != avoid_profile,
-             f"normal={normal_profile}, avoid={avoid_profile}")
-        test("Signal avoidance uses foot_no_signals profile",
-             avoid_profile == "foot_no_signals",
-             f"got {avoid_profile}")
+        test("Signal toggle reflected in response",
+             normal_flags is False and avoid_flags is True,
+             f"normal={normal_flags}, avoid={avoid_flags}")
 
         # The routes should differ somewhat (different distances or paths)
         routes_differ = abs(normal_dist - avoid_dist) > 0.05
@@ -225,8 +230,8 @@ def main():
              routes_differ or normal_coords != avoid_coords,
              f"normal={normal_dist}km, avoid={avoid_dist}km")
 
-        print(f"    Normal: {normal_dist}km via {normal_profile}")
-        print(f"    Avoid:  {avoid_dist}km via {avoid_profile}")
+        print(f"    Normal: {normal_dist}km")
+        print(f"    Avoid:  {avoid_dist}km")
 
     # --- Summary ---
     print("\n" + "=" * 60)

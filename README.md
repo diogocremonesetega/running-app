@@ -2,59 +2,43 @@
 
 An elevation-aware running route generator for the Berkeley area, featuring real-time 3D terrain routing, interactive map visualization, and customizable elevation profiles.
 
-![Elevation Visualizer](https://img.shields.io/badge/Status-Phase_4_Complete-brightgreen) ![GraphHopper](https://img.shields.io/badge/Routing-GraphHopper%2010.0-blue) ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
+![Elevation Visualizer](https://img.shields.io/badge/Status-v2-brightgreen) ![GraphHopper](https://img.shields.io/badge/Routing-GraphHopper%2010.0-blue) ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
 
 ## ✨ Features
 
 - **Address Search** — Type any street name, park, or landmark to set your start/end location (powered by OpenStreetMap Nominatim geocoding)
 - **Loop & Point-to-Point Modes** — Toggle between circular loop routes and A-to-B point-to-point routes
-- **Elevation-Aware Routing** — 4 custom profiles that actively adjust routes based on terrain:
+- **Elevation-Aware Routing** — Three profiles that adjust routes based on terrain:
   - ⛰️ **Balanced** — Moderate hills for everyday runs
   - 🌊 **Flat Recovery** — Avoids hills for easy recovery days
   - 🔺 **Hill Training** — Seeks steep climbs for workouts
-  - 🚦 **No Signals** — Prioritizes footways/paths over main roads
+- **Infrastructure Toggles** — Optional routing preferences per request:
+  - Avoid traffic signals
+  - Prioritize well-lit streets (night runs)
+  - Prioritize soft surfaces (track/trail)
+  - Include water (hydration) and restrooms (separate toggles)
 - **Interactive Map** — Leaflet.js with dark CartoDB tiles, route colored by elevation
 - **Elevation Profile Chart** — Interactive chart with hover-to-map sync
-- **Circle-Based Loop Routing** — Generates natural loop routes using waypoint circles
-- **Compass Direction Selector** — Choose which direction your route heads (N/NE/E/SE/S/SW/W/NW)
+- **GraphHopper round_trip** — Organic loop routes from a single start point
 - **km/miles Toggle** — Switch between metric and imperial units (distance + elevation)
 - **SRTM 3D Elevation Data** — Real terrain data for accurate elevation profiles
-- **Spatial Intelligence (Phase 2 & 3)** — PostGIS-backed storage for safety zones, construction zones, and route history
-- **Dynamic Overlays** — Avoid unlit streets, crime zones, and construction in real-time. Visualize traffic signals and crime heatmaps.
-- **Scenic Routing & Weather (Phase 4)** — Prefers parks and trails. Integrates real-time weather, AQI, wind, and comfort scores. Suggests optimal wind-based start bearing. Calculates Safety and Scenic route scores.
+- **Live Run Tracking** — GPS breadcrumb recording with optional save to PostGIS `route_history`
 
 ## 🏗️ Architecture
 
 ```text
-                        ┌────────────────────────┐
-                        │ Live External APIs     │
-                        │ - Open-Meteo (Weather) │
-                        │ - Nominatim (Geocoding)│
-                        └──────────┬─────────────┘
-                                   │
-┌─────────────┐         ┌──────────▼─────────────┐       ┌──────────────────┐
-│  Browser UI  │───────▶│  FastAPI Backend       │──────▶│  GraphHopper     │
-│  (Leaflet)   │◀───────│  (Route Gen & APIs)    │◀──────│  Routing Engine  │
-│  :8000       │        └──────────┬─────────────┘       │  :8989           │
-└──────┬───────┘                   │                     └────────┬─────────┘
-       │                           ▼                              ▼
-       │                ┌────────────────────────┐       ┌──────────────────┐
-       │                │    PostGIS Database    │       │   NorCal OSM     │
-       │                │  (Spatial Intelligence)│       │   + SRTM DEM     │
-       │                └──────────▲─────────────┘       └──────────────────┘
-       │                           │
-       │                ┌──────────┴─────────────┐
-       │                │   Background Workers   │
-       │                │    (Data Ingestors)    │
-       │                └──────────┬─────────────┘
-       │                           │
-       ▼                           ▼
-┌──────────────┐        ┌────────────────────────┐
-│ Overpass API │        │ External Data Sources  │
-│(Signals/POIs)│        │ - Socrata (Crime)      │
-└──────────────┘        │ - SF Bay 511 (Const.)  │
-                        │ - OSM/Overpass (Scenic)│
-                        └────────────────────────┘
+┌─────────────┐     ┌────────────────────┐     ┌──────────────────┐
+│  Browser UI │────▶│  FastAPI Backend   │────▶│  GraphHopper     │
+│  (Leaflet)  │◀────│  Route generation  │◀────│  :8989 + OSM    │
+└──────┬──────┘     └─────────┬──────────┘     └──────────────────┘
+       │                      │
+       │                      ▼
+       │            ┌────────────────────┐
+       ▼            │ PostGIS (optional) │
+┌──────────────┐    │ route_history      │
+│ Overpass API │    └────────────────────┘
+│ Nominatim    │
+└──────────────┘
 ```
 
 ## 🚀 Quick Start
@@ -89,15 +73,27 @@ cd ..
 
 ### 3. Start & Stop (Unified Scripts)
 
-We use unified scripts to manage PostGIS (via Docker), GraphHopper (natively via Java), and the FastAPI backend.
+**Windows (PowerShell):**
 
-```bash
-# from the repository root
-./start.sh    # Launch everything
-./stop.sh     # Shut everything down
+```powershell
+# Full stack: PostGIS + GraphHopper + FastAPI (keep the terminal open)
+.\start.ps1
+
+# UI/API only — fastest fix if http://localhost:8000 refuses connection
+.\start-backend.ps1
+
+# Stop Docker, GraphHopper, and anything on port 8000
+.\stop.ps1
 ```
 
-Wait until you see `[OK] All services running!` on start.
+**Linux/macOS:**
+
+```bash
+./start.sh
+./stop.sh
+```
+
+Wait until you see `Uvicorn running on http://0.0.0.0:8000` (or `[OK] Backend starting` on Windows). **Leave that terminal open** — closing it stops the server and the browser will show `ERR_CONNECTION_REFUSED`.
 
 ### 4. Open the Visualizer
 
@@ -138,12 +134,12 @@ running-route-generator/
 |--------|---------------------------|------------------------------------|
 | POST   | `/api/v1/generate-route`  | Generate a loop route              |
 | POST   | `/api/v1/point-to-point`  | Route between two points           |
-| GET    | `/api/v1/weather-advisory`| Get comfort score, wind, & AQI     |
-| GET    | `/api/v1/safety-overlay`  | Get GeoJSON crime/safety zones     |
+| POST   | `/api/v1/runs`            | Save completed live run            |
 | GET    | `/api/v1/geocode?q=...`   | Address search (Nominatim)         |
 | GET    | `/api/v1/reverse-geocode` | Coordinates → address              |
-| GET    | `/api/v1/profiles`        | List available routing profiles    |
+| GET    | `/api/v1/profiles`        | List elevation profiles            |
 | GET    | `/api/v1/health`          | Health check + GH status           |
+| GET    | `/api/v1/diagnostics`     | GraphHopper + database checks      |
 
 ### Generate Route Example
 
@@ -155,8 +151,10 @@ curl -X POST http://localhost:8000/api/v1/generate-route \
     "distance_km": 5.0,
     "elevation_preference": "moderate",
     "avoid_traffic_signals": false,
-    "num_waypoints": 5,
-    "start_bearing": 0
+    "prioritize_well_lit_streets": false,
+    "prioritize_soft_surfaces": false,
+    "include_water": false,
+    "include_restrooms": false
   }'
 ```
 
@@ -177,13 +175,6 @@ Tests verify: GraphHopper connection, 3D elevation data, loop route closure, ele
 | Hill Training | 242.0 m   | 7.05 km  |
 
 > The flat profile produces **17% less elevation gain** than the hilly profile for the same loop.
-
-## 🛡️ Resilience & Background Workers
-
-The application features self-healing background workers that:
-- Refresh crime and construction data every 30 minutes.
-- Refresh scenic/nature segments every 6 hours.
-- **Fail-fast & Retry**: If the public Overpass API times out (504), workers will retry every 60 seconds until data is successfully synchronized.
 
 ## 🛠️ Tech Stack
 
